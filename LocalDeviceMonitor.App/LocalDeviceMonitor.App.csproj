@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="cosmo-logo.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="BACnet" Version="3.0.2" />
+    <PackageReference Include="NModbus" Version="3.0.81" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="cosmo-logo.png" />
+  </ItemGroup>
+</Project>
