@@ -3,140 +3,261 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
-        Title="Local Device Monitor - BLE / WIFI / LAN / BACNET / MODBUS / ONVIF"
-        Height="820"
-        Width="1820"
+        Title="Local Device Monitor"
+        Height="860"
+        Width="1840"
+        MinHeight="760"
+        MinWidth="1450"
         WindowStartupLocation="CenterScreen"
-        Background="#F3F6FB">
+        Background="{DynamicResource AppWindowBackgroundBrush}">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#EEF3F9"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BorderBrushTheme" Color="#DCE5F1"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#0F172A"/>
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#64748B"/>
+        <SolidColorBrush x:Key="GridHeaderBrush" Color="#F7FAFE"/>
+        <SolidColorBrush x:Key="GridRowBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="GridAltRowBrush" Color="#FAFCFF"/>
+        <SolidColorBrush x:Key="GridHoverBrush" Color="#F2F7FF"/>
+        <SolidColorBrush x:Key="GridSelectedBrush" Color="#DBEAFE"/>
+        <SolidColorBrush x:Key="InputBackgroundBrush" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="InputBorderBrush" Color="#CBD5E1"/>
+
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#2563EB"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#64748B"/>
+
+        <DropShadowEffect x:Key="SoftShadow"
+                          BlurRadius="18"
+                          ShadowDepth="0"
+                          Opacity="0.12"/>
+
         <Style x:Key="CardBorderStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="14"/>
-            <Setter Property="Padding" Value="16"/>
-            <Setter Property="Margin" Value="0,0,12,0"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushTheme}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Effect" Value="{StaticResource SoftShadow}"/>
         </Style>
 
         <Style x:Key="FilterLabelStyle" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <Style x:Key="RoundedTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style x:Key="RoundedComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,0"/>
         </Style>
 
         <Style x:Key="ModernButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="38"/>
+            <Setter Property="Height" Value="40"/>
             <Setter Property="Padding" Value="18,0"/>
-            <Setter Property="Margin" Value="0,24,10,0"/>
+            <Setter Property="Margin" Value="0,22,8,0"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="#2563EB"/>
-            <Setter Property="BorderBrush" Value="#2563EB"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButtonStyle}">
-            <Setter Property="Background" Value="#64748B"/>
-            <Setter Property="BorderBrush" Value="#64748B"/>
+            <Setter Property="Background" Value="#475569"/>
+            <Setter Property="BorderBrush" Value="#475569"/>
         </Style>
 
-        <Style x:Key="DetailLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#64748B"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
+        <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButtonStyle}">
+            <Setter Property="Background" Value="#0EA5E9"/>
+            <Setter Property="BorderBrush" Value="#0EA5E9"/>
         </Style>
 
-        <Style x:Key="DetailValueStyle" TargetType="TextBlock">
+        <Style x:Key="ThemeIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Foreground" Value="#0F172A"/>
-            <Setter Property="Margin" Value="0,0,0,14"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource GridHeaderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushTheme}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="10,10"/>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        </Style>
+
+        <Style TargetType="DataGridRow">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource GridRowBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource GridHoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource GridSelectedBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="14">
+    <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- HEADER -->
         <Border Grid.Row="0"
-                CornerRadius="18"
+                CornerRadius="22"
                 Padding="0"
-                Margin="0,0,0,14">
+                Margin="0,0,0,12"
+                Effect="{StaticResource SoftShadow}">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#0F172A" Offset="0"/>
-                    <GradientStop Color="#172554" Offset="0.55"/>
-                    <GradientStop Color="#1E3A8A" Offset="1"/>
+                    <GradientStop Color="#0B1220" Offset="0"/>
+                    <GradientStop Color="#132B61" Offset="0.55"/>
+                    <GradientStop Color="#1D4ED8" Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
 
-            <Grid Height="140">
+            <Grid Height="138">
                 <Ellipse Width="260"
                          Height="260"
-                         Fill="#1D4ED8"
-                         Opacity="0.12"
+                         Fill="#60A5FA"
+                         Opacity="0.10"
                          HorizontalAlignment="Right"
                          VerticalAlignment="Top"
-                         Margin="0,-120,-90,0"/>
+                         Margin="0,-120,-80,0"/>
 
-                <Ellipse Width="180"
-                         Height="180"
+                <Ellipse Width="200"
+                         Height="200"
                          Fill="#38BDF8"
                          Opacity="0.08"
                          HorizontalAlignment="Left"
                          VerticalAlignment="Bottom"
-                         Margin="-40,0,0,-90"/>
+                         Margin="-50,0,0,-90"/>
 
                 <Grid Margin="24,18">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="230"/>
                         <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="240"/>
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="Local Device Monitor"
                                    Foreground="White"
-                                   FontSize="28"
+                                   FontSize="29"
                                    FontWeight="Bold"/>
 
-                        <TextBlock Text="Plataforma de monitorização local de dispositivos BLE, Wi-Fi, LAN, BACNET, MODBUS e ONVIF"
-                                   Foreground="#CBD5E1"
-                                   FontSize="14"
-                                   Margin="0,8,0,0"
+                        <TextBlock Text="Plataforma de monitorização local de dispositivos"
+                                   Foreground="#D7E3F4"
+                                   FontSize="13"
+                                   Margin="0,7,0,0"
                                    TextWrapping="Wrap"/>
 
-                        <Border Background="#1E293B"
-                                BorderBrush="#334155"
-                                BorderThickness="1"
-                                CornerRadius="10"
-                                Padding="10,6"
-                                Margin="0,14,0,0"
-                                HorizontalAlignment="Left">
-                            <TextBlock Text="COSMO Device Discovery Console"
-                                       Foreground="#93C5FD"
-                                       FontWeight="SemiBold"
-                                       FontSize="12"/>
-                        </Border>
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Border Background="#132238"
+                                    BorderBrush="#334155"
+                                    BorderThickness="1"
+                                    CornerRadius="11"
+                                    Padding="11,6"
+                                    Margin="0,0,8,0">
+                                <TextBlock Text="COSMO Device Discovery Console"
+                                           Foreground="#93C5FD"
+                                           FontWeight="SemiBold"
+                                           FontSize="11"/>
+                            </Border>
+
+                            <Border Background="#132238"
+                                    BorderBrush="#334155"
+                                    BorderThickness="1"
+                                    CornerRadius="11"
+                                    Padding="11,6">
+                                <TextBlock Text="Monitorização em tempo real"
+                                           Foreground="#BFDBFE"
+                                           FontWeight="SemiBold"
+                                           FontSize="11"/>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
 
-                    <Grid Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border Width="200"
-                                Height="110"
+                    <Grid Grid.Column="1"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
+                        <Border Width="192"
+                                Height="98"
                                 CornerRadius="20"
                                 Background="#60A5FA"
                                 Opacity="0.12"/>
 
-                        <Border Width="190"
-                                Height="100"
+                        <Border Width="182"
+                                Height="88"
                                 CornerRadius="18"
                                 BorderBrush="#93C5FD"
                                 BorderThickness="1.5"
@@ -144,54 +265,69 @@
                             <Grid>
                                 <Image Source="pack://application:,,,/cosmo-logo.png"
                                        Stretch="Uniform"
-                                       Margin="12,8"/>
+                                       Margin="10,8"/>
                             </Grid>
                         </Border>
                     </Grid>
 
                     <Border Grid.Column="2"
-                            Background="#111827"
-                            BorderBrush="#334155"
+                            Background="#101826"
+                            BorderBrush="#2B3A55"
                             BorderThickness="1"
-                            CornerRadius="14"
+                            CornerRadius="16"
                             Padding="16,12"
                             Margin="16,0,0,0"
                             VerticalAlignment="Center"
-                            Height="70">
+                            Height="72">
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="Estado do sistema"
                                        Foreground="#94A3B8"
-                                       FontSize="12"/>
+                                       FontSize="11"/>
                             <TextBlock x:Name="StatusTextBlock"
                                        Text="Pronto."
                                        Foreground="White"
                                        FontWeight="SemiBold"
                                        FontSize="15"
-                                       Margin="0,4,0,0"/>
+                                       Margin="0,5,0,0"
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </Grid>
+
+                <Button x:Name="ThemeToggleButton"
+                        Width="36"
+                        Height="36"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,12,12,0"
+                        Click="ThemeToggleButton_Click"
+                        ToolTip="Alternar tema"
+                        Style="{StaticResource ThemeIconButtonStyle}"
+                        Content="🌙"/>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,0,0,14">
+        <!-- FILTERS + SUMMARY -->
+        <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
-                    CornerRadius="16"
-                    Background="White"
-                    BorderBrush="#E2E8F0"
+                    CornerRadius="18"
+                    Background="{DynamicResource PanelBrush}"
+                    BorderBrush="{DynamicResource BorderBrushTheme}"
                     BorderThickness="1"
                     Padding="18"
-                    Margin="0,0,0,14">
+                    Margin="0,0,0,10"
+                    Effect="{StaticResource SoftShadow}">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="190"/>
-                        <ColumnDefinition Width="260"/>
-                        <ColumnDefinition Width="260"/>
+                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -201,7 +337,7 @@
                     <StackPanel Grid.Column="0" Margin="0,0,12,0">
                         <TextBlock Text="Origem" Style="{StaticResource FilterLabelStyle}"/>
                         <ComboBox x:Name="OriginComboBox"
-                                  Height="38"
+                                  Style="{StaticResource RoundedComboBoxStyle}"
                                   SelectionChanged="Filter_Changed">
                             <ComboBoxItem Content="Todas"/>
                             <ComboBoxItem Content="Bluetooth"/>
@@ -216,23 +352,20 @@
                     <StackPanel Grid.Column="1" Margin="0,0,12,0">
                         <TextBlock Text="Nome" Style="{StaticResource FilterLabelStyle}"/>
                         <TextBox x:Name="NameFilterTextBox"
-                                 Height="38"
-                                 VerticalContentAlignment="Center"
-                                 Padding="10,0"
+                                 Style="{StaticResource RoundedTextBoxStyle}"
                                  TextChanged="Filter_Changed"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Margin="0,0,12,0">
                         <TextBlock Text="Fabricante / Modelo" Style="{StaticResource FilterLabelStyle}"/>
                         <TextBox x:Name="ManufacturerFilterTextBox"
-                                 Height="38"
-                                 VerticalContentAlignment="Center"
-                                 Padding="10,0"
+                                 Style="{StaticResource RoundedTextBoxStyle}"
                                  TextChanged="Filter_Changed"/>
                     </StackPanel>
 
-                    <Button Grid.Column="3"
-                            Content="Scan"
+                    <Button x:Name="ScanButton"
+                            Grid.Column="3"
+                            Content="Iniciar Scan Contínuo"
                             Style="{StaticResource ModernButtonStyle}"
                             Click="Scan_Click"/>
 
@@ -242,275 +375,255 @@
                             Click="Clear_Click"/>
 
                     <Button Grid.Column="5"
+                            Content="Export CSV"
+                            Width="120"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="ExportCsv_Click"/>
+
+                    <Button Grid.Column="6"
                             Content="Export TXT"
-                            Style="{StaticResource SecondaryButtonStyle}"
+                            Width="120"
+                            Style="{StaticResource AccentButtonStyle}"
                             Click="ExportTxt_Click"/>
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}">
+            <primitives:UniformGrid Grid.Row="1" Columns="8" Rows="1">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Total de dispositivos" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="TotalCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#0F172A" Margin="0,8,0,0"/>
+                        <TextBlock Text="Total" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="TotalCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Bluetooth" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="BluetoothCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#2563EB" Margin="0,8,0,0"/>
+                        <TextBlock Text="Bluetooth" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="BluetoothCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#2563EB" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="Wi-Fi" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="WifiCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#7C3AED" Margin="0,8,0,0"/>
+                        <TextBlock Text="Wi-Fi" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="WifiCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#7C3AED" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="3" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="LAN" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="LanCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#059669" Margin="0,8,0,0"/>
+                        <TextBlock Text="LAN" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="LanCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#059669" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="4" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="BACNET" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="BacnetCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#B45309" Margin="0,8,0,0"/>
+                        <TextBlock Text="BACNET" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="BacnetCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#B45309" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="5" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="MODBUS" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="ModbusCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#DC2626" Margin="0,8,0,0"/>
+                        <TextBlock Text="MODBUS" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="ModbusCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#DC2626" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="6" Style="{StaticResource CardBorderStyle}">
+                <Border Style="{StaticResource CardBorderStyle}">
                     <StackPanel>
-                        <TextBlock Text="ONVIF" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="OnvifCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#0891B2" Margin="0,8,0,0"/>
+                        <TextBlock Text="ONVIF" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="OnvifCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#0891B2" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="7" Style="{StaticResource CardBorderStyle}" Margin="0">
+                <Border Style="{StaticResource CardBorderStyle}" Margin="0">
                     <StackPanel>
-                        <TextBlock Text="Online" Foreground="#64748B" FontSize="13"/>
-                        <TextBlock x:Name="OnlineCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#16A34A" Margin="0,8,0,0"/>
+                        <TextBlock Text="Online" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11"/>
+                        <TextBlock x:Name="OnlineCountText" Text="0" FontSize="24" FontWeight="Bold" Foreground="#16A34A" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
-            </Grid>
+            </primitives:UniformGrid>
         </Grid>
 
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="360"/>
-            </Grid.ColumnDefinitions>
+        <!-- TABS -->
+        <TabControl Grid.Row="2"
+                    Background="Transparent"
+                    BorderThickness="0">
 
-            <Border Grid.Column="0"
-                    CornerRadius="16"
-                    Background="White"
-                    BorderBrush="#E2E8F0"
-                    BorderThickness="1"
-                    Padding="12"
-                    Margin="0,0,14,0">
-                <DataGrid x:Name="DevicesGrid"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          SelectionMode="Single"
-                          GridLinesVisibility="Horizontal"
-                          HeadersVisibility="Column"
-                          RowHeaderWidth="0"
-                          BorderThickness="0"
-                          Background="Transparent"
-                          SelectionChanged="DevicesGrid_SelectionChanged">
-                    <DataGrid.Resources>
-                        <Style TargetType="DataGridColumnHeader">
-                            <Setter Property="Background" Value="#F8FAFC"/>
-                            <Setter Property="Foreground" Value="#0F172A"/>
-                            <Setter Property="FontWeight" Value="SemiBold"/>
-                            <Setter Property="BorderBrush" Value="#E2E8F0"/>
-                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                            <Setter Property="Padding" Value="10,8"/>
-                        </Style>
+            <TabItem Header="Monitorização">
+                <Border CornerRadius="18"
+                        Background="{DynamicResource PanelBrush}"
+                        BorderBrush="{DynamicResource BorderBrushTheme}"
+                        BorderThickness="1"
+                        Padding="14"
+                        Margin="0,6,0,0"
+                        Effect="{StaticResource SoftShadow}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                        <Style TargetType="DataGridCell">
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Padding" Value="8,6"/>
-                        </Style>
-
-                        <Style TargetType="DataGridRow">
-                            <Setter Property="Height" Value="40"/>
-                            <Setter Property="Background" Value="White"/>
-                            <Setter Property="Foreground" Value="#0F172A"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#F8FAFC"/>
-                                </Trigger>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="#DBEAFE"/>
-                                    <Setter Property="Foreground" Value="#0F172A"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.Resources>
-
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="" Binding="{Binding Icon}" Width="45"/>
-                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="145"/>
-                        <DataGridTextColumn Header="Origem" Binding="{Binding Origin}" Width="95"/>
-                        <DataGridTextColumn Header="Tipo de Dispositivo" Binding="{Binding DeviceType}" Width="165"/>
-                        <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="190"/>
-                        <DataGridTextColumn Header="Fabricante" Binding="{Binding Manufacturer}" Width="155"/>
-                        <DataGridTextColumn Header="MAC / BSSID" Binding="{Binding MacAddress}" Width="160"/>
-                        <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="130"/>
-
-                        <DataGridTemplateColumn Header="Estado" Width="110">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Border x:Name="StatusBadge"
-                                            CornerRadius="10"
-                                            Padding="10,4"
-                                            HorizontalAlignment="Left"
-                                            Background="#E5E7EB">
-                                        <TextBlock x:Name="StatusText"
-                                                   Text="{Binding Status}"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#374151"/>
-                                    </Border>
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding Status}" Value="Online">
-                                            <Setter TargetName="StatusBadge" Property="Background" Value="#DCFCE7"/>
-                                            <Setter TargetName="StatusText" Property="Foreground" Value="#166534"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                            <Setter TargetName="StatusBadge" Property="Background" Value="#FEE2E2"/>
-                                            <Setter TargetName="StatusText" Property="Foreground" Value="#991B1B"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}" Value="Desconhecido">
-                                            <Setter TargetName="StatusBadge" Property="Background" Value="#FEF3C7"/>
-                                            <Setter TargetName="StatusText" Property="Foreground" Value="#92400E"/>
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                        <DataGridTextColumn Header="Protocolo" Binding="{Binding Protocol}" Width="105"/>
-                        <DataGridTextColumn Header="Portas" Binding="{Binding OpenPorts}" Width="115"/>
-                        <DataGridTextColumn Header="Serviços" Binding="{Binding DetectedServices}" Width="220"/>
-                        <DataGridTextColumn Header="RSSI" Binding="{Binding Rssi}" Width="70"/>
-                        <DataGridTextColumn Header="Distância (m)" Binding="{Binding EstimatedDistanceMeters}" Width="105"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </Border>
-
-            <Border Grid.Column="1"
-                    CornerRadius="16"
-                    Background="White"
-                    BorderBrush="#E2E8F0"
-                    BorderThickness="1"
-                    Padding="18">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Detalhes do dispositivo"
-                                   FontSize="18"
-                                   FontWeight="Bold"
-                                   Foreground="#0F172A"/>
-
-                        <TextBlock Text="Seleciona um dispositivo na tabela."
-                                   FontSize="13"
-                                   Foreground="#64748B"
-                                   Margin="0,4,0,18"/>
-
-                        <Border Background="#F8FAFC"
-                                BorderBrush="#E2E8F0"
-                                BorderThickness="1"
-                                CornerRadius="14"
-                                Padding="16"
-                                Margin="0,0,0,18">
-                            <StackPanel HorizontalAlignment="Center">
-                                <TextBlock Text="{Binding SelectedItem.Icon, ElementName=DevicesGrid}"
-                                           FontSize="36"
-                                           HorizontalAlignment="Center"/>
-                                <TextBlock Text="{Binding SelectedItem.Name, ElementName=DevicesGrid}"
+                        <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                                <TextBlock Text="Dispositivos Detetados"
                                            FontSize="18"
                                            FontWeight="Bold"
-                                           Foreground="#0F172A"
-                                           Margin="0,8,0,4"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding SelectedItem.DeviceType, ElementName=DevicesGrid}"
-                                           FontSize="13"
-                                           Foreground="#64748B"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
-
-                                <Border x:Name="DetailsStatusBadge"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Border Background="#E0E7FF"
                                         CornerRadius="10"
-                                        Padding="10,4"
-                                        HorizontalAlignment="Center"
-                                        Margin="0,14,0,0"
-                                        Background="#E5E7EB">
-                                    <TextBlock x:Name="DetailsStatusText"
-                                               Text="{Binding SelectedItem.Status, ElementName=DevicesGrid}"
+                                        Padding="8,3"
+                                        Margin="10,0,0,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="Vista principal"
+                                               FontSize="11"
                                                FontWeight="SemiBold"
-                                               Foreground="#374151"/>
+                                               Foreground="#3730A3"/>
                                 </Border>
                             </StackPanel>
-                        </Border>
 
-                        <TextBlock Text="ID" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.Id, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                            <TextBlock DockPanel.Dock="Right"
+                                       Text="Estado, protocolo, serviços e portas abertas"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
 
-                        <TextBlock Text="Origem" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.Origin, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                        <DataGrid Grid.Row="1"
+                                  x:Name="DevicesGrid"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  SelectionMode="Single"
+                                  GridLinesVisibility="Horizontal"
+                                  HeadersVisibility="Column"
+                                  RowHeaderWidth="0"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  AlternatingRowBackground="{DynamicResource GridAltRowBrush}"
+                                  RowBackground="{DynamicResource GridRowBrush}"
+                                  HorizontalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                  VerticalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                  FontSize="13">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="" Binding="{Binding Icon}" Width="50"/>
+                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="150"/>
+                                <DataGridTextColumn Header="Origem" Binding="{Binding Origin}" Width="100"/>
+                                <DataGridTextColumn Header="Tipo de Dispositivo" Binding="{Binding DeviceType}" Width="185"/>
+                                <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="200"/>
+                                <DataGridTextColumn Header="Fabricante" Binding="{Binding Manufacturer}" Width="170"/>
+                                <DataGridTextColumn Header="MAC / BSSID" Binding="{Binding MacAddress}" Width="180"/>
+                                <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="140"/>
 
-                        <TextBlock Text="Fabricante" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.Manufacturer, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                                <DataGridTemplateColumn Header="Estado" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="StatusBadge"
+                                                    CornerRadius="12"
+                                                    Padding="10,4"
+                                                    HorizontalAlignment="Left"
+                                                    Background="#E5E7EB">
+                                                <TextBlock x:Name="StatusText"
+                                                           Text="{Binding Status}"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="#374151"/>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Status}" Value="Online">
+                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#DCFCE7"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#166534"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#FEE2E2"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#991B1B"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Desconhecido">
+                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#FEF3C7"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#92400E"/>
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                        <TextBlock Text="Protocolo" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.Protocol, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                                <DataGridTextColumn Header="Protocolo" Binding="{Binding Protocol}" Width="115"/>
+                                <DataGridTextColumn Header="Portas" Binding="{Binding OpenPorts}" Width="130"/>
+                                <DataGridTextColumn Header="Serviços" Binding="{Binding DetectedServices}" Width="280"/>
+                                <DataGridTextColumn Header="RSSI" Binding="{Binding Rssi}" Width="75"/>
+                                <DataGridTextColumn Header="Distância (m)" Binding="{Binding EstimatedDistanceMeters}" Width="120"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
 
-                        <TextBlock Text="IP" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.IpAddress, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+            <TabItem Header="⚠ Shadow IT Detection">
+                <Border CornerRadius="18"
+                        Background="{DynamicResource PanelBrush}"
+                        BorderBrush="{DynamicResource BorderBrushTheme}"
+                        BorderThickness="1"
+                        Padding="14"
+                        Margin="0,6,0,0"
+                        Effect="{StaticResource SoftShadow}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                        <TextBlock Text="MAC / BSSID" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.MacAddress, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Dispositivos Suspeitos / Novos"
+                                       FontSize="18"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
 
-                        <TextBlock Text="Portas abertas" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.OpenPorts, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                            <Border Background="#FEE2E2"
+                                    CornerRadius="10"
+                                    Padding="8,3"
+                                    Margin="10,0,0,0">
+                                <TextBlock x:Name="ShadowCountText"
+                                           Text="0 novos"
+                                           Foreground="#991B1B"
+                                           FontWeight="SemiBold"
+                                           FontSize="11"/>
+                            </Border>
+                        </StackPanel>
 
-                        <TextBlock Text="Serviços detetados" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.DetectedServices, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
+                        <DataGrid x:Name="ShadowGrid"
+                                  Grid.Row="1"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  SelectionMode="Single"
+                                  GridLinesVisibility="Horizontal"
+                                  HeadersVisibility="Column"
+                                  RowHeaderWidth="0"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  AlternatingRowBackground="{DynamicResource GridAltRowBrush}"
+                                  RowBackground="{DynamicResource GridRowBrush}"
+                                  HorizontalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                  VerticalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                  FontSize="13">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="" Binding="{Binding Icon}" Width="50"/>
+                                <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="140"/>
+                                <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="220"/>
+                                <DataGridTextColumn Header="Tipo" Binding="{Binding DeviceType}" Width="180"/>
+                                <DataGridTextColumn Header="Fabricante" Binding="{Binding Manufacturer}" Width="180"/>
+                                <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="180"/>
+                                <DataGridTextColumn Header="Portas" Binding="{Binding OpenPorts}" Width="120"/>
+                                <DataGridTextColumn Header="Serviços" Binding="{Binding DetectedServices}" Width="320"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
 
-                        <TextBlock Text="RSSI" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.Rssi, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
-
-                        <TextBlock Text="Distância estimada" Style="{StaticResource DetailLabelStyle}"/>
-                        <TextBlock Text="{Binding SelectedItem.EstimatedDistanceMeters, ElementName=DevicesGrid}" Style="{StaticResource DetailValueStyle}"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-        </Grid>
+        </TabControl>
     </Grid>
 </Window>

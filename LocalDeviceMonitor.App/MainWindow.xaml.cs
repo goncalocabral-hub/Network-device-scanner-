@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
@@ -7,9 +8,11 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using System.Xml.Linq;
 using Windows.Devices.Bluetooth.Advertisement;
 using System.IO.BACnet;
@@ -20,30 +23,151 @@ namespace LocalDeviceMonitor.App;
 
 public partial class MainWindow : Window
 {
-    private readonly List<DeviceInfo> _allDevices = new();
+    private readonly ObservableCollection<DeviceInfo> _allDevices = new();
+    private readonly ObservableCollection<DeviceInfo> _shadowDevices = new();
+    private readonly HashSet<string> _knownDevices = new(StringComparer.OrdinalIgnoreCase);
+
+    private int _baselineScanCount = 0;
+    private const int BaselineScansRequired = 3;
+    private bool _baselineEstablished = false;
+    private int _newDevicesThisScan = 0;
+
+    private bool _isDarkMode = false;
+    private readonly DispatcherTimer _scanTimer = new();
+    private bool _isContinuousScanEnabled = false;
+    private bool _isScanRunning = false;
 
     private static readonly int[] CommonPorts =
     {
         80, 443, 22, 554, 8000, 8080, 47808, 502, 3702
     };
 
+    private static readonly Dictionary<ushort, string> BluetoothCompanies = new()
+    {
+        { 6, "Microsoft / Kontakt.io" },
+        { 10, "CSR (Qualcomm)" },
+        { 13, "Texas Instruments" },
+        { 15, "Broadcom" },
+        { 76, "Apple" },
+        { 89, "Nordic Semiconductor" },
+        { 117, "Samsung" },
+        { 224, "Google" },
+        { 352, "Apple" },
+        { 0, "Ericsson AB" },
+        { 101, " HP, Inc." },
+        { 2409, "Woan Technology (Shenzhen) Co., Ltd." },
+        { 147, "Universal Electronics, Inc." },
+        { 1704, "GD Midea Air-Conditioning Equipment Co., Ltd."},
+        { 34818, "Ningbo Joyson Electronic Corp." },
+        { 20 , "Mitsubishi Electric Corporation" }
+    };
+
+    private static readonly Dictionary<string, string> OuiVendors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "FCFBFB", "Apple" },
+        { "F0D1A9", "Apple" },
+        { "3C2EFF", "Apple" },
+        { "8C8590", "Apple" },
+        { "A4C361", "Apple" },
+        { "B8E856", "Apple" },
+        { "BC679C", "Apple" },
+        { "DCF756", "Apple" },
+
+        { "E8E5D6", "Samsung" },
+        { "3089D3", "Samsung" },
+        { "5CF370", "Samsung" },
+        { "FCA13E", "Samsung" },
+        { "7C61D9", "Samsung" },
+
+        { "488D36", "Hikvision" },
+        { "D4E853", "Hikvision" },
+        { "C4EA1D", "Hikvision" },
+
+        { "F4F26D", "TP-Link" },
+        { "50C7BF", "TP-Link" },
+        { "B0487A", "TP-Link" },
+        { "60E327", "TP-Link" },
+
+        { "D8EC5E", "Intel" },
+        { "3C6AA7", "Intel" },
+        { "5C80B6", "Intel" },
+
+        { "FC3497", "Xiaomi" },
+        { "64CC2E", "Xiaomi" },
+        { "28E347", "Xiaomi" },
+
+        { "2CF05D", "Cisco" },
+        { "F8A2D6", "Cisco" },
+        { "001B54", "Cisco" },
+
+        { "4CC9E4", "Ubiquiti" },
+        { "24A43C", "Ubiquiti" },
+        { "80DA13", "Ubiquiti" },
+
+        { "CC2D21", "MikroTik" },
+        { "08B4B1", "MikroTik" },
+
+        { "A44CC8", "Dell" },
+        { "F04DA2", "HP" },
+        { "D017C2", "Lenovo" }
+    };
+
     public MainWindow()
     {
         InitializeComponent();
+
         DevicesGrid.ItemsSource = _allDevices;
+        ShadowGrid.ItemsSource = _shadowDevices;
+
         OriginComboBox.SelectedIndex = 0;
         StatusTextBlock.Text = "Pronto.";
         UpdateSummaryCards(_allDevices);
+        UpdateShadowCount();
+        ApplyLightTheme();
+
+        _scanTimer.Interval = TimeSpan.FromSeconds(12);
+        _scanTimer.Tick += ScanTimer_Tick;
     }
 
     private async void Scan_Click(object sender, RoutedEventArgs e)
     {
+        if (!_isContinuousScanEnabled)
+        {
+            _isContinuousScanEnabled = true;
+            _scanTimer.Start();
+            ScanButton.Content = "Parar Scan Contínuo";
+            StatusTextBlock.Text = "Scan contínuo iniciado.";
+
+            await RunFullScanAsync();
+        }
+        else
+        {
+            _isContinuousScanEnabled = false;
+            _scanTimer.Stop();
+            ScanButton.Content = "Iniciar Scan Contínuo";
+            StatusTextBlock.Text = "Scan contínuo parado.";
+        }
+    }
+
+    private async void ScanTimer_Tick(object? sender, EventArgs e)
+    {
+        await RunFullScanAsync();
+    }
+
+    private async Task RunFullScanAsync()
+    {
+        if (_isScanRunning)
+            return;
+
+        _isScanRunning = true;
+        _newDevicesThisScan = 0;
+
         try
         {
-            StatusTextBlock.Text = "A executar scan BLE + WIFI + LAN + BACNET + MODBUS + ONVIF...";
-            _allDevices.Clear();
-            DevicesGrid.ItemsSource = null;
-            UpdateSummaryCards(_allDevices);
+            if (!_baselineEstablished)
+                StatusTextBlock.Text = $"A criar baseline... scan {_baselineScanCount + 1}/{BaselineScansRequired}";
+            else
+                StatusTextBlock.Text = "A executar scan contínuo...";
 
             var bleTask = ScanBleAsync();
             var wifiTask = ScanWifiAsync();
@@ -54,28 +178,289 @@ public partial class MainWindow : Window
 
             await Task.WhenAll(bleTask, wifiTask, lanTask, bacnetTask, modbusTask, onvifTask);
 
-            _allDevices.AddRange(bleTask.Result);
-            _allDevices.AddRange(wifiTask.Result);
-            _allDevices.AddRange(lanTask.Result);
-            _allDevices.AddRange(bacnetTask.Result);
-            _allDevices.AddRange(modbusTask.Result);
-            _allDevices.AddRange(onvifTask.Result);
+            var currentScanDevices = new List<DeviceInfo>();
+            currentScanDevices.AddRange(bleTask.Result);
+            currentScanDevices.AddRange(wifiTask.Result);
+            currentScanDevices.AddRange(lanTask.Result);
+            currentScanDevices.AddRange(bacnetTask.Result);
+            currentScanDevices.AddRange(modbusTask.Result);
+            currentScanDevices.AddRange(onvifTask.Result);
 
-            var uniqueDevices = _allDevices
-                .GroupBy(d => $"{d.Origin}|{d.Id}|{d.IpAddress}")
-                .Select(g => g.First())
-                .ToList();
+            ProcessDiscoveredDevices(currentScanDevices);
 
-            _allDevices.Clear();
-            _allDevices.AddRange(uniqueDevices);
-
+            MarkOfflineDevices();
             ApplyFilters();
-            StatusTextBlock.Text = $"Scan concluído. {_allDevices.Count} dispositivo(s)/rede(s) encontrados.";
+            UpdateShadowCount();
+
+            if (!_baselineEstablished)
+            {
+                _baselineScanCount++;
+
+                if (_baselineScanCount >= BaselineScansRequired)
+                {
+                    _baselineEstablished = true;
+                    StatusTextBlock.Text =
+                        $"Baseline concluída. {_allDevices.Count} dispositivo(s) conhecidos.";
+                }
+                else
+                {
+                    StatusTextBlock.Text =
+                        $"Baseline em curso... scan {_baselineScanCount}/{BaselineScansRequired}. {_allDevices.Count} dispositivo(s) aprendidos.";
+                }
+            }
+            else
+            {
+                StatusTextBlock.Text =
+                    $"Scan atualizado. {_allDevices.Count} registo(s), {_allDevices.Count(d => d.Status == "Online")} online.";
+
+                if (_newDevicesThisScan > 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show(
+                            $"{_newDevicesThisScan} novos dispositivos detetados",
+                            "Shadow IT Detection",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    });
+                }
+            }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Erro ao executar scan: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
             StatusTextBlock.Text = "Erro no scan.";
+            MessageBox.Show(
+                $"Erro ao executar scan: {ex.Message}",
+                "Erro",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isScanRunning = false;
+        }
+    }
+
+    private async Task<List<DeviceInfo>> DiscoverDevicesAsync()
+    {
+        var bleTask = ScanBleAsync();
+        var wifiTask = ScanWifiAsync();
+        var lanTask = ScanLanAsync();
+        var bacnetTask = ScanBacnetAsync();
+        var modbusTask = ScanModbusAsync();
+        var onvifTask = ScanOnvifAsync();
+
+        await Task.WhenAll(bleTask, wifiTask, lanTask, bacnetTask, modbusTask, onvifTask);
+
+        var discoveredDevices = new List<DeviceInfo>();
+        discoveredDevices.AddRange(bleTask.Result);
+        discoveredDevices.AddRange(wifiTask.Result);
+        discoveredDevices.AddRange(lanTask.Result);
+        discoveredDevices.AddRange(bacnetTask.Result);
+        discoveredDevices.AddRange(modbusTask.Result);
+        discoveredDevices.AddRange(onvifTask.Result);
+
+        return discoveredDevices;
+    }
+
+    private void ProcessDiscoveredDevices(IEnumerable<DeviceInfo> discoveredDevices)
+    {
+        foreach (var device in discoveredDevices)
+        {
+            EnrichDevice(device);
+            RegisterShadowDevice(device);
+            UpsertDevice(device);
+        }
+    }
+
+    private void EnrichDevice(DeviceInfo device)
+    {
+        device.LastSeen = DateTime.Now;
+        device.Status = "Online";
+
+        EnrichManufacturerFromMac(device);
+        ClassifyDevice(device);
+    }
+
+    private void RegisterShadowDevice(DeviceInfo device)
+    {
+        var matchedKnown = FindMatchingKnownDevice(device);
+
+        if (matchedKnown != null)
+            return;
+
+        _knownDevices.Add(BuildSoftDeviceKey(device));
+
+        // durante a baseline só aprende
+        if (!_baselineEstablished)
+            return;
+
+        bool alreadyInShadow = _shadowDevices.Any(d => IsSameLogicalDevice(d, device));
+        if (!alreadyInShadow)
+        {
+            _shadowDevices.Add(device);
+            _newDevicesThisScan++;
+        }
+    }
+
+    private DeviceInfo? FindMatchingKnownDevice(DeviceInfo scannedDevice)
+    {
+        foreach (var known in _allDevices)
+        {
+            if (IsSameLogicalDevice(known, scannedDevice))
+                return known;
+        }
+
+        string softKey = BuildSoftDeviceKey(scannedDevice);
+
+        if (_knownDevices.Contains(softKey))
+            return scannedDevice;
+
+        return null;
+    }
+
+    private bool IsSameLogicalDevice(DeviceInfo a, DeviceInfo b)
+    {
+        // 1. MAC igual
+        if (!string.IsNullOrWhiteSpace(a.MacAddress) &&
+            !string.IsNullOrWhiteSpace(b.MacAddress) &&
+            string.Equals(NormalizeValue(a.MacAddress), NormalizeValue(b.MacAddress), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 2. ID igual
+        if (!string.IsNullOrWhiteSpace(a.Id) &&
+            !string.IsNullOrWhiteSpace(b.Id) &&
+            string.Equals(NormalizeValue(a.Id), NormalizeValue(b.Id), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 3. Nome + fabricante + origem
+        if (!string.IsNullOrWhiteSpace(a.Name) &&
+            !string.IsNullOrWhiteSpace(b.Name) &&
+            !string.IsNullOrWhiteSpace(a.Manufacturer) &&
+            !string.IsNullOrWhiteSpace(b.Manufacturer) &&
+            string.Equals(NormalizeValue(a.Name), NormalizeValue(b.Name), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeValue(a.Manufacturer), NormalizeValue(b.Manufacturer), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeValue(a.Origin), NormalizeValue(b.Origin), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 4. IP + nome + origem
+        if (!string.IsNullOrWhiteSpace(a.IpAddress) &&
+            !string.IsNullOrWhiteSpace(b.IpAddress) &&
+            string.Equals(NormalizeValue(a.IpAddress), NormalizeValue(b.IpAddress), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeValue(a.Origin), NormalizeValue(b.Origin), StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(a.Name) &&
+            !string.IsNullOrWhiteSpace(b.Name) &&
+            string.Equals(NormalizeValue(a.Name), NormalizeValue(b.Name), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 5. Fabricante + tipo + origem
+        if (!string.IsNullOrWhiteSpace(a.Manufacturer) &&
+            !string.IsNullOrWhiteSpace(b.Manufacturer) &&
+            !string.IsNullOrWhiteSpace(a.DeviceType) &&
+            !string.IsNullOrWhiteSpace(b.DeviceType) &&
+            string.Equals(NormalizeValue(a.Manufacturer), NormalizeValue(b.Manufacturer), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeValue(a.DeviceType), NormalizeValue(b.DeviceType), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeValue(a.Origin), NormalizeValue(b.Origin), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private string BuildSoftDeviceKey(DeviceInfo device)
+    {
+        string origin = NormalizeValue(device.Origin);
+        string name = NormalizeValue(device.Name);
+        string manufacturer = NormalizeValue(device.Manufacturer);
+        string deviceType = NormalizeValue(device.DeviceType);
+
+        if (!string.IsNullOrWhiteSpace(device.MacAddress))
+            return $"mac:{NormalizeValue(device.MacAddress)}";
+
+        if (!string.IsNullOrWhiteSpace(device.Id))
+            return $"id:{NormalizeValue(device.Id)}";
+
+        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(manufacturer))
+            return $"nm:{origin}|{name}|{manufacturer}";
+
+        if (!string.IsNullOrWhiteSpace(device.IpAddress) && !string.IsNullOrWhiteSpace(name))
+            return $"ipn:{origin}|{NormalizeValue(device.IpAddress)}|{name}";
+
+        return $"fallback:{origin}|{manufacturer}|{deviceType}|{name}";
+    }
+
+    private static string NormalizeValue(string? value)
+    {
+        return (value ?? "").Trim().ToLowerInvariant();
+    }
+
+    private void UpsertDevice(DeviceInfo scannedDevice)
+    {
+        var existing = _allDevices.FirstOrDefault(d =>
+            string.Equals(d.Origin, scannedDevice.Origin, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(d.Id, scannedDevice.Id, StringComparison.OrdinalIgnoreCase));
+
+        if (existing == null)
+        {
+            scannedDevice.Status = "Online";
+            scannedDevice.LastSeen = DateTime.Now;
+            _allDevices.Add(scannedDevice);
+            return;
+        }
+
+        existing.Icon = scannedDevice.Icon;
+        existing.DeviceType = scannedDevice.DeviceType;
+        existing.Name = scannedDevice.Name;
+        existing.Manufacturer = scannedDevice.Manufacturer;
+        existing.MacAddress = scannedDevice.MacAddress;
+        existing.IpAddress = scannedDevice.IpAddress;
+        existing.Status = "Online";
+        existing.LastSeen = DateTime.Now;
+        existing.Protocol = scannedDevice.Protocol;
+        existing.Rssi = scannedDevice.Rssi;
+        existing.EstimatedDistanceMeters = scannedDevice.EstimatedDistanceMeters;
+        existing.OpenPorts = scannedDevice.OpenPorts;
+        existing.DetectedServices = scannedDevice.DetectedServices;
+
+        existing.BacnetDeviceId = scannedDevice.BacnetDeviceId;
+        existing.BacnetVendorName = scannedDevice.BacnetVendorName;
+        existing.BacnetModelName = scannedDevice.BacnetModelName;
+        existing.BacnetFirmware = scannedDevice.BacnetFirmware;
+        existing.BacnetObjectSummary = scannedDevice.BacnetObjectSummary;
+
+        existing.ModbusUnitId = scannedDevice.ModbusUnitId;
+        existing.ModbusRegisterSummary = scannedDevice.ModbusRegisterSummary;
+
+        existing.OnvifXAddr = scannedDevice.OnvifXAddr;
+        existing.OnvifScopes = scannedDevice.OnvifScopes;
+        existing.OnvifEndpointAddress = scannedDevice.OnvifEndpointAddress;
+    }
+
+    private void MarkOfflineDevices()
+    {
+        var now = DateTime.Now;
+        var offlineThreshold = TimeSpan.FromSeconds(45);
+
+        foreach (var device in _allDevices)
+        {
+            if (device.LastSeen == DateTime.MinValue)
+            {
+                device.Status = "Offline";
+                continue;
+            }
+
+            device.Status = (now - device.LastSeen) <= offlineThreshold
+                ? "Online"
+                : "Offline";
         }
     }
 
@@ -85,14 +470,7 @@ public partial class MainWindow : Window
         NameFilterTextBox.Text = string.Empty;
         ManufacturerFilterTextBox.Text = string.Empty;
 
-        DevicesGrid.ItemsSource = null;
-        DevicesGrid.ItemsSource = _allDevices;
-
-        if (_allDevices.Count > 0)
-            DevicesGrid.SelectedIndex = 0;
-
-        UpdateSummaryCards(_allDevices);
-        UpdateDetailsStatusBadge();
+        ApplyFilters();
         StatusTextBlock.Text = $"Filtros limpos. {_allDevices.Count} registo(s) disponíveis.";
     }
 
@@ -102,11 +480,6 @@ public partial class MainWindow : Window
             return;
 
         ApplyFilters();
-    }
-
-    private void DevicesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        UpdateDetailsStatusBadge();
     }
 
     private async Task<List<DeviceInfo>> ScanBleAsync()
@@ -120,48 +493,53 @@ public partial class MainWindow : Window
 
         void OnReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
         {
-            Dispatcher.Invoke(() =>
+            string mac = FormatBluetoothAddress(args.BluetoothAddress);
+            string name = args.Advertisement.LocalName;
+            int rssi = args.RawSignalStrengthInDBm;
+
+            string manufacturer = "Desconhecido";
+            if (args.Advertisement.ManufacturerData.Count > 0)
             {
-                string mac = FormatBluetoothAddress(args.BluetoothAddress);
-                string name = args.Advertisement.LocalName;
-                int rssi = args.RawSignalStrengthInDBm;
+                var companyId = args.Advertisement.ManufacturerData[0].CompanyId;
+                manufacturer = GetBluetoothCompanyName(companyId);
 
-                string manufacturer = "Desconhecido";
-                if (args.Advertisement.ManufacturerData.Count > 0)
-                {
-                    var companyId = args.Advertisement.ManufacturerData[0].CompanyId;
-                    manufacturer = companyId == 6 ? "Kontakt.io" : $"CompanyId {companyId}";
-                }
+                if (companyId == 6)
+                    manufacturer = "Kontakt.io / Microsoft";
+            }
 
-                var device = new DeviceInfo
-                {
-                    Id = mac,
-                    Origin = "Bluetooth",
-                    Name = string.IsNullOrWhiteSpace(name) ? "BLE Device" : name,
-                    Manufacturer = manufacturer,
-                    MacAddress = mac,
-                    Rssi = rssi,
-                    EstimatedDistanceMeters = EstimateDistance(rssi, -59, 2.2)
-                };
+            var device = new DeviceInfo
+            {
+                Id = mac,
+                Origin = "Bluetooth",
+                Name = string.IsNullOrWhiteSpace(name) ? "BLE Device" : name,
+                Manufacturer = manufacturer,
+                MacAddress = mac,
+                Rssi = rssi,
+                EstimatedDistanceMeters = EstimateDistance(rssi, -59, 2.2),
+                Status = "Online",
+                LastSeen = DateTime.Now
+            };
 
-                ClassifyDevice(device);
-                result[args.BluetoothAddress] = device;
-            });
+            result[args.BluetoothAddress] = device;
         }
 
         watcher.Received += OnReceived;
         watcher.Start();
-        await Task.Delay(8000);
+        await Task.Delay(5000);
         watcher.Stop();
         watcher.Received -= OnReceived;
 
-        return result.Values.OrderByDescending(d => d.Rssi ?? int.MinValue).ToList();
+        return result.Values
+            .OrderByDescending(d => d.Rssi ?? int.MinValue)
+            .ToList();
     }
 
     private async Task<List<DeviceInfo>> ScanWifiAsync()
     {
-        var output = await ExecuteCommandAsync("netsh", "wlan show networks mode=bssid");
         var list = new List<DeviceInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var output = await ExecuteCommandAsync("netsh", "wlan show networks mode=bssid");
 
         string? currentSsid = null;
         string? currentBssid = null;
@@ -196,23 +574,123 @@ public partial class MainWindow : Window
                 string name = string.IsNullOrWhiteSpace(currentSsid) ? "WiFi Network" : currentSsid!;
                 string bssid = currentBssid ?? "";
 
+                var vendor = GetVendorFromMac(bssid);
+
                 var device = new DeviceInfo
                 {
-                    Id = string.IsNullOrWhiteSpace(bssid) ? Guid.NewGuid().ToString("N") : bssid,
+                    Id = string.IsNullOrWhiteSpace(bssid) ? Guid.NewGuid().ToString("N") : $"WIFI-AP-{bssid}",
                     Origin = "WIFI",
                     Name = name,
-                    Manufacturer = "WiFi",
+                    Manufacturer = !string.IsNullOrWhiteSpace(vendor) ? vendor : "WiFi Access Point",
                     MacAddress = bssid,
                     Rssi = rssi,
-                    EstimatedDistanceMeters = currentSignalPercent.HasValue ? EstimateDistance(rssi, -50, 2.6) : null
+                    EstimatedDistanceMeters = currentSignalPercent.HasValue ? EstimateDistance(rssi, -50, 2.6) : null,
+                    Status = "Online",
+                    LastSeen = DateTime.Now
                 };
 
-                ClassifyDevice(device);
-                list.Add(device);
+                if (seen.Add(device.Id))
+                    list.Add(device);
             }
         }
 
-        return list;
+        var arpOutput = await ExecuteCommandAsync("arp", "-a");
+        var arpRegex = new Regex(@"(?<ip>\d+\.\d+\.\d+\.\d+)\s+(?<mac>([0-9a-f]{2}-){5}[0-9a-f]{2})", RegexOptions.IgnoreCase);
+
+        var arpMap = arpRegex.Matches(arpOutput)
+            .Cast<Match>()
+            .GroupBy(m => m.Groups["ip"].Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.First().Groups["mac"].Value,
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (ni.OperationalStatus != OperationalStatus.Up)
+                continue;
+
+            if (ni.NetworkInterfaceType != NetworkInterfaceType.Wireless80211)
+                continue;
+
+            var ipProps = ni.GetIPProperties();
+            var uni = ipProps.UnicastAddresses
+                .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork && a.IPv4Mask is not null);
+
+            if (uni == null || uni.IPv4Mask == null)
+                continue;
+
+            var localIp = uni.Address.ToString();
+            var hosts = EnumerateSubnetHosts(uni.Address, uni.IPv4Mask).Take(254).ToList();
+
+            var semaphore = new SemaphoreSlim(35);
+
+            var pingTasks = hosts.Select(async ip =>
+            {
+                await semaphore.WaitAsync();
+
+                try
+                {
+                    using var ping = new Ping();
+                    var reply = await ping.SendPingAsync(ip, 150);
+                    if (reply.Status != IPStatus.Success)
+                        return null;
+
+                    string ipText = ip.ToString();
+                    if (string.Equals(ipText, localIp, StringComparison.OrdinalIgnoreCase))
+                        return null;
+
+                    string hostName;
+                    try
+                    {
+                        hostName = (await Dns.GetHostEntryAsync(ip)).HostName;
+                    }
+                    catch
+                    {
+                        hostName = $"WiFi Client {ipText}";
+                    }
+
+                    arpMap.TryGetValue(ipText, out string? mac);
+                    var vendor = GetVendorFromMac(mac);
+
+                    var portInfo = await DetectCommonPortsAsync(ipText);
+
+                    var device = new DeviceInfo
+                    {
+                        Id = $"WIFI-CLIENT-{ipText}",
+                        Origin = "WIFI",
+                        Name = hostName,
+                        Manufacturer = !string.IsNullOrWhiteSpace(vendor) ? vendor : "WiFi Client",
+                        IpAddress = ipText,
+                        MacAddress = mac ?? "",
+                        OpenPorts = portInfo.openPorts,
+                        DetectedServices = string.IsNullOrWhiteSpace(portInfo.services) ? "Cliente Wi-Fi" : portInfo.services,
+                        Status = "Online",
+                        LastSeen = DateTime.Now
+                    };
+
+                    return device;
+                }
+                catch
+                {
+                    return null;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var pingResults = await Task.WhenAll(pingTasks);
+
+            foreach (var item in pingResults.Where(x => x != null))
+            {
+                if (seen.Add(item!.Id))
+                    list.Add(item!);
+            }
+        }
+
+        return list.OrderBy(d => d.Name).ToList();
     }
 
     private async Task<List<DeviceInfo>> ScanLanAsync()
@@ -225,8 +703,7 @@ public partial class MainWindow : Window
             if (ni.OperationalStatus != OperationalStatus.Up)
                 continue;
 
-            if (ni.NetworkInterfaceType != NetworkInterfaceType.Ethernet &&
-                ni.NetworkInterfaceType != NetworkInterfaceType.Wireless80211)
+            if (ni.NetworkInterfaceType != NetworkInterfaceType.Ethernet)
                 continue;
 
             var ipProps = ni.GetIPProperties();
@@ -237,9 +714,12 @@ public partial class MainWindow : Window
                 continue;
 
             var hosts = EnumerateSubnetHosts(uni.Address, uni.IPv4Mask).Take(254).ToList();
+            var semaphore = new SemaphoreSlim(35);
 
             var pingTasks = hosts.Select(async ip =>
             {
+                await semaphore.WaitAsync();
+
                 try
                 {
                     using var ping = new Ping();
@@ -257,7 +737,7 @@ public partial class MainWindow : Window
                         hostName = ip.ToString();
                     }
 
-                    var (openPorts, services) = await DetectCommonPortsAsync(ip.ToString());
+                    var portInfo = await DetectCommonPortsAsync(ip.ToString());
 
                     var device = new DeviceInfo
                     {
@@ -266,20 +746,26 @@ public partial class MainWindow : Window
                         Name = hostName,
                         Manufacturer = "LAN Host",
                         IpAddress = ip.ToString(),
-                        OpenPorts = openPorts,
-                        DetectedServices = services
+                        OpenPorts = portInfo.openPorts,
+                        DetectedServices = portInfo.services,
+                        Status = "Online",
+                        LastSeen = DateTime.Now
                     };
 
-                    ClassifyDevice(device);
                     return device;
                 }
                 catch
                 {
                     return null;
                 }
+                finally
+                {
+                    semaphore.Release();
+                }
             });
 
             var pingResults = await Task.WhenAll(pingTasks);
+
             foreach (var item in pingResults.Where(x => x != null))
             {
                 if (ipStrings.Add(item!.IpAddress))
@@ -299,25 +785,27 @@ public partial class MainWindow : Window
             if (existing != null)
             {
                 existing.MacAddress = mac;
-                ClassifyDevice(existing);
+                existing.LastSeen = DateTime.Now;
             }
             else if (ipStrings.Add(ip))
             {
-                var (openPorts, services) = await DetectCommonPortsAsync(ip);
+                var portInfo = await DetectCommonPortsAsync(ip);
+                var vendor = GetVendorFromMac(mac);
 
                 var device = new DeviceInfo
                 {
                     Id = ip,
                     Origin = "LAN",
                     Name = ip,
-                    Manufacturer = "LAN Host",
+                    Manufacturer = !string.IsNullOrWhiteSpace(vendor) ? vendor : "LAN Host",
                     IpAddress = ip,
                     MacAddress = mac,
-                    OpenPorts = openPorts,
-                    DetectedServices = services
+                    OpenPorts = portInfo.openPorts,
+                    DetectedServices = portInfo.services,
+                    Status = "Online",
+                    LastSeen = DateTime.Now
                 };
 
-                ClassifyDevice(device);
                 list.Add(device);
             }
         }
@@ -352,21 +840,42 @@ public partial class MainWindow : Window
                                 return;
                         }
 
+                        var deviceObjectId = new BacnetObjectId(BacnetObjectTypes.OBJECT_DEVICE, deviceId);
+
+                        string vendorName = "";
+                        string modelName = "";
+                        string firmware = "";
+                        string objectSummary = "";
+
+                        try
+                        {
+                            vendorName = ReadBacnetStringProperty(sender, adr, deviceObjectId, BacnetPropertyIds.PROP_VENDOR_NAME);
+                            modelName = ReadBacnetStringProperty(sender, adr, deviceObjectId, BacnetPropertyIds.PROP_MODEL_NAME);
+                            firmware = ReadBacnetStringProperty(sender, adr, deviceObjectId, BacnetPropertyIds.PROP_FIRMWARE_REVISION);
+                            objectSummary = ReadBacnetObjectSummary(sender, adr, deviceObjectId, 6);
+                        }
+                        catch
+                        {
+                        }
+
                         var device = new DeviceInfo
                         {
                             Id = $"BACNET-{deviceId}",
                             Origin = "BACNET",
-                            Name = $"BACnet Device {deviceId}",
-                            Manufacturer = vendorId > 0 ? $"Vendor {vendorId}" : "BACnet",
+                            Name = !string.IsNullOrWhiteSpace(modelName) ? modelName : $"BACnet Device {deviceId}",
+                            Manufacturer = !string.IsNullOrWhiteSpace(vendorName) ? vendorName : (vendorId > 0 ? $"Vendor {vendorId}" : "BACnet"),
                             IpAddress = ip,
                             OpenPorts = "47808",
                             DetectedServices = "BACnet | I-Am recebido",
                             BacnetDeviceId = deviceId,
+                            BacnetVendorName = vendorName,
+                            BacnetModelName = modelName,
+                            BacnetFirmware = firmware,
+                            BacnetObjectSummary = objectSummary,
                             Status = "Online",
-                            Protocol = "BACnet/IP"
+                            Protocol = "BACnet/IP",
+                            LastSeen = DateTime.Now
                         };
-
-                        ClassifyDevice(device);
 
                         lock (lockObj)
                         {
@@ -417,8 +926,12 @@ public partial class MainWindow : Window
                 candidateIps.Add(ip.ToString());
         }
 
+        var semaphore = new SemaphoreSlim(45);
+
         var portChecks = candidateIps.Select(async ip =>
         {
+            await semaphore.WaitAsync();
+
             try
             {
                 bool open = await IsUdpLikelyBacnetAsync(ip, 47808);
@@ -433,7 +946,7 @@ public partial class MainWindow : Window
                         return null;
                 }
 
-                var device = new DeviceInfo
+                return new DeviceInfo
                 {
                     Id = $"BACNET-PORT-{ip}",
                     Origin = "BACNET",
@@ -443,15 +956,17 @@ public partial class MainWindow : Window
                     OpenPorts = "47808",
                     DetectedServices = "BACnet | Porta 47808 detetada",
                     Status = "Online",
-                    Protocol = "BACnet/IP"
+                    Protocol = "BACnet/IP",
+                    LastSeen = DateTime.Now
                 };
-
-                ClassifyDevice(device);
-                return device;
             }
             catch
             {
                 return null;
+            }
+            finally
+            {
+                semaphore.Release();
             }
         });
 
@@ -492,8 +1007,7 @@ public partial class MainWindow : Window
     private async Task<List<DeviceInfo>> ScanModbusAsync()
     {
         var list = new List<DeviceInfo>();
-        var seenIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var candidateIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -516,116 +1030,162 @@ public partial class MainWindow : Window
                 candidateIps.Add(ip.ToString());
         }
 
+        var semaphore = new SemaphoreSlim(25);
+
         var tasks = candidateIps.Select(async ip =>
         {
+            await semaphore.WaitAsync();
+
             try
             {
-                if (!await IsTcpPortOpenAsync(ip, 502, 200))
-                    return null;
+                if (!await IsTcpPortOpenAsync(ip, 502, 500))
+                    return new List<DeviceInfo>();
 
-                var modbusDevice = await TryReadModbusDeviceAsync(ip);
-                return modbusDevice;
+                var devices = await TryReadModbusDevicesAsync(ip);
+
+                if (devices.Count == 0)
+                {
+                    return new List<DeviceInfo>
+                    {
+                        new DeviceInfo
+                        {
+                            Id = $"MODBUS-PORT-{ip}",
+                            Origin = "MODBUS",
+                            Name = $"Possível dispositivo Modbus ({ip})",
+                            Manufacturer = "Modbus TCP",
+                            IpAddress = ip,
+                            OpenPorts = "502",
+                            DetectedServices = "Modbus | Porta 502 detetada, sem leitura confirmada",
+                            Status = "Online",
+                            Protocol = "Modbus TCP",
+                            LastSeen = DateTime.Now
+                        }
+                    };
+                }
+
+                return devices;
             }
             catch
             {
-                return null;
+                return new List<DeviceInfo>();
+            }
+            finally
+            {
+                semaphore.Release();
             }
         });
 
         var results = await Task.WhenAll(tasks);
 
-        foreach (var device in results.Where(d => d != null))
+        foreach (var deviceList in results)
         {
-            if (seenIps.Add(device!.IpAddress))
-                list.Add(device!);
+            foreach (var device in deviceList)
+            {
+                if (seenIds.Add(device.Id))
+                    list.Add(device);
+            }
         }
 
         return list.OrderBy(d => d.Name).ToList();
     }
 
-    private async Task<DeviceInfo?> TryReadModbusDeviceAsync(string ip)
+    private async Task<List<DeviceInfo>> TryReadModbusDevicesAsync(string ip)
     {
+        var devices = new List<DeviceInfo>();
+
         try
         {
             using var tcpClient = new TcpClient();
+
             var connectTask = tcpClient.ConnectAsync(ip, 502);
-            var completed = await Task.WhenAny(connectTask, Task.Delay(700));
+            var completed = await Task.WhenAny(connectTask, Task.Delay(1200));
 
             if (completed != connectTask || !tcpClient.Connected)
-                return null;
+                return devices;
 
             var factory = new ModbusFactory();
             using var master = factory.CreateMaster(tcpClient);
+            master.Transport.ReadTimeout = 1000;
+            master.Transport.WriteTimeout = 1000;
+            master.Transport.Retries = 0;
 
-            byte detectedUnitId = 1;
-            ushort[]? registers = null;
-
-            for (byte unitId = 1; unitId <= 5; unitId++)
+            for (byte unitId = 1; unitId <= 20; unitId++)
             {
-                try
-                {
-                    registers = master.ReadHoldingRegisters(unitId, 0, 4);
-                    if (registers != null && registers.Length > 0)
-                    {
-                        detectedUnitId = unitId;
-                        break;
-                    }
-                }
-                catch
-                {
-                }
-            }
+                var summaries = new List<string>();
+                bool found = false;
 
-            if (registers == null || registers.Length == 0)
-            {
-                for (byte unitId = 1; unitId <= 5; unitId++)
+                ushort[] candidateAddresses = { 0, 1, 10, 20, 100, 300, 400, 1000 };
+
+                foreach (var address in candidateAddresses)
                 {
                     try
                     {
-                        registers = master.ReadInputRegisters(unitId, 0, 4);
-                        if (registers != null && registers.Length > 0)
+                        var regs = master.ReadHoldingRegisters(unitId, address, 6);
+                        if (regs != null && regs.Length > 0)
                         {
-                            detectedUnitId = unitId;
-                            break;
+                            found = true;
+                            summaries.Add($"Holding@{address}: " +
+                                          string.Join(", ", regs.Select((v, i) => $"R{address + i}={v}")));
+
+                            if (summaries.Count >= 2)
+                                break;
                         }
                     }
                     catch
                     {
                     }
                 }
+
+                if (summaries.Count < 2)
+                {
+                    foreach (var address in candidateAddresses)
+                    {
+                        try
+                        {
+                            var regs = master.ReadInputRegisters(unitId, address, 6);
+                            if (regs != null && regs.Length > 0)
+                            {
+                                found = true;
+                                summaries.Add($"Input@{address}: " +
+                                              string.Join(", ", regs.Select((v, i) => $"R{address + i}={v}")));
+
+                                if (summaries.Count >= 2)
+                                    break;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+
+                if (!found)
+                    continue;
+
+                string registerSummary = string.Join(" | ", summaries);
+
+                devices.Add(new DeviceInfo
+                {
+                    Id = $"MODBUS-{ip}-U{unitId}",
+                    Origin = "MODBUS",
+                    Name = $"Modbus Device {ip} (Unit {unitId})",
+                    Manufacturer = "Modbus TCP",
+                    IpAddress = ip,
+                    OpenPorts = "502",
+                    DetectedServices = $"Modbus | Unit ID: {unitId} | {registerSummary}",
+                    ModbusUnitId = unitId,
+                    ModbusRegisterSummary = registerSummary,
+                    Status = "Online",
+                    Protocol = "Modbus TCP",
+                    LastSeen = DateTime.Now
+                });
             }
-
-            string registerSummary = registers != null && registers.Length > 0
-                ? string.Join(", ", registers.Select((v, i) => $"R{i}={v}"))
-                : "Sem leitura de registos";
-
-            var services = new List<string> { "Modbus" };
-            services.Add($"Unit ID: {detectedUnitId}");
-            if (!string.IsNullOrWhiteSpace(registerSummary))
-                services.Add($"Registos: {registerSummary}");
-
-            var device = new DeviceInfo
-            {
-                Id = $"MODBUS-{ip}",
-                Origin = "MODBUS",
-                Name = $"Modbus Device {ip}",
-                Manufacturer = "Modbus TCP",
-                IpAddress = ip,
-                OpenPorts = "502",
-                DetectedServices = string.Join(" | ", services),
-                ModbusUnitId = detectedUnitId,
-                ModbusRegisterSummary = registerSummary,
-                Status = "Online",
-                Protocol = "Modbus TCP"
-            };
-
-            ClassifyDevice(device);
-            return device;
         }
         catch
         {
-            return null;
         }
+
+        return devices;
     }
 
     private async Task<List<DeviceInfo>> ScanOnvifAsync()
@@ -635,11 +1195,14 @@ public partial class MainWindow : Window
 
         await Task.Run(async () =>
         {
+            UdpClient? udp = null;
+
             try
             {
-                using var udp = new UdpClient(0);
-                udp.EnableBroadcast = false;
+                udp = new UdpClient(AddressFamily.InterNetwork);
+                udp.EnableBroadcast = true;
                 udp.MulticastLoopback = false;
+                udp.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
 
                 var probeXml = BuildOnvifProbeMessage();
                 var probeBytes = Encoding.UTF8.GetBytes(probeXml);
@@ -647,7 +1210,24 @@ public partial class MainWindow : Window
                 var multicastEndpoint = new IPEndPoint(IPAddress.Parse("239.255.255.250"), 3702);
                 await udp.SendAsync(probeBytes, probeBytes.Length, multicastEndpoint);
 
-                var stopAt = DateTime.UtcNow.AddSeconds(5);
+                await Task.Delay(150);
+
+                var broadcastEndpoint = new IPEndPoint(IPAddress.Broadcast, 3702);
+                await udp.SendAsync(probeBytes, probeBytes.Length, broadcastEndpoint);
+
+                foreach (var bcast in GetBroadcastAddresses())
+                {
+                    try
+                    {
+                        var subnetBroadcastEndpoint = new IPEndPoint(bcast, 3702);
+                        await udp.SendAsync(probeBytes, probeBytes.Length, subnetBroadcastEndpoint);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                var stopAt = DateTime.UtcNow.AddSeconds(6);
 
                 while (DateTime.UtcNow < stopAt)
                 {
@@ -685,6 +1265,11 @@ public partial class MainWindow : Window
                     if (!seen.Add(key))
                         continue;
 
+                    var portInfo = await DetectOnvifServicePortsAsync(parsed.Value.Ip);
+
+                    string manufacturer = BuildOnvifManufacturer(parsed.Value);
+                    string displayName = BuildOnvifDisplayName(parsed.Value);
+
                     var serviceParts = new List<string> { "ONVIF" };
 
                     if (!string.IsNullOrWhiteSpace(parsed.Value.XAddr))
@@ -693,36 +1278,173 @@ public partial class MainWindow : Window
                     if (!string.IsNullOrWhiteSpace(parsed.Value.Scopes))
                         serviceParts.Add($"Scopes: {TrimText(parsed.Value.Scopes, 120)}");
 
-                    var device = new DeviceInfo
+                    if (!string.IsNullOrWhiteSpace(portInfo.services))
+                        serviceParts.Add(portInfo.services);
+
+                    var openPorts = new List<string> { "3702" };
+                    if (!string.IsNullOrWhiteSpace(portInfo.bestPort) && !openPorts.Contains(portInfo.bestPort))
+                        openPorts.Add(portInfo.bestPort);
+
+                    list.Add(new DeviceInfo
                     {
                         Id = $"ONVIF-{parsed.Value.Ip}",
                         Origin = "ONVIF",
-                        Name = BuildOnvifDisplayName(parsed.Value),
-                        Manufacturer = BuildOnvifManufacturer(parsed.Value),
+                        Name = displayName,
+                        Manufacturer = manufacturer,
                         IpAddress = parsed.Value.Ip,
-                        OpenPorts = "3702",
+                        OpenPorts = string.Join(", ", openPorts),
                         DetectedServices = string.Join(" | ", serviceParts),
                         Status = "Online",
                         Protocol = "ONVIF",
                         OnvifXAddr = parsed.Value.XAddr,
                         OnvifScopes = parsed.Value.Scopes,
-                        OnvifEndpointAddress = parsed.Value.EndpointAddress
-                    };
-
-                    ClassifyDevice(device);
-                    list.Add(device);
+                        OnvifEndpointAddress = parsed.Value.EndpointAddress,
+                        LastSeen = DateTime.Now
+                    });
                 }
             }
             catch
             {
             }
+            finally
+            {
+                udp?.Dispose();
+            }
         });
 
+        var candidateIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (ni.OperationalStatus != OperationalStatus.Up)
+                continue;
+
+            if (ni.NetworkInterfaceType != NetworkInterfaceType.Ethernet &&
+                ni.NetworkInterfaceType != NetworkInterfaceType.Wireless80211)
+                continue;
+
+            var ipProps = ni.GetIPProperties();
+            var uni = ipProps.UnicastAddresses
+                .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork && a.IPv4Mask is not null);
+
+            if (uni == null || uni.IPv4Mask == null)
+                continue;
+
+            foreach (var ip in EnumerateSubnetHosts(uni.Address, uni.IPv4Mask).Take(254))
+                candidateIps.Add(ip.ToString());
+        }
+
+        var semaphore = new SemaphoreSlim(35);
+
+        var fallbackTasks = candidateIps.Select(async ip =>
+        {
+            await semaphore.WaitAsync();
+
+            try
+            {
+                bool responds = await IsUdpLikelyOnvifAsync(ip, 3702);
+                if (!responds)
+                    return null;
+
+                string key = $"ONVIF-FALLBACK-{ip}";
+                if (!seen.Add(key))
+                    return null;
+
+                var portInfo = await DetectOnvifServicePortsAsync(ip);
+
+                var ports = new List<string> { "3702" };
+                if (!string.IsNullOrWhiteSpace(portInfo.bestPort) && !ports.Contains(portInfo.bestPort))
+                    ports.Add(portInfo.bestPort);
+
+                return new DeviceInfo
+                {
+                    Id = $"ONVIF-FALLBACK-{ip}",
+                    Origin = "ONVIF",
+                    Name = $"Possível dispositivo ONVIF ({ip})",
+                    Manufacturer = "ONVIF / WS-Discovery",
+                    IpAddress = ip,
+                    OpenPorts = string.Join(", ", ports),
+                    DetectedServices = string.IsNullOrWhiteSpace(portInfo.services)
+                        ? "ONVIF | Porta 3702 / WS-Discovery detetado"
+                        : $"ONVIF | Porta 3702 / WS-Discovery detetado | {portInfo.services}",
+                    Status = "Online",
+                    Protocol = "ONVIF",
+                    LastSeen = DateTime.Now
+                };
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var fallbackResults = await Task.WhenAll(fallbackTasks);
+
+        foreach (var item in fallbackResults.Where(x => x != null))
+            list.Add(item!);
+
         return list
-            .GroupBy(d => $"{d.IpAddress}|{d.OnvifXAddr}")
+            .GroupBy(d => $"{d.IpAddress}|{d.OnvifXAddr}|{d.Id}")
             .Select(g => g.First())
             .OrderBy(d => d.Name)
             .ToList();
+    }
+
+    private async Task<bool> IsUdpLikelyOnvifAsync(string ipAddress, int port)
+    {
+        try
+        {
+            using var udp = new UdpClient(AddressFamily.InterNetwork);
+            udp.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+            udp.Client.ReceiveTimeout = 700;
+            udp.Connect(ipAddress, port);
+
+            var probeXml = BuildOnvifProbeMessage();
+            var data = Encoding.UTF8.GetBytes(probeXml);
+
+            await udp.SendAsync(data, data.Length);
+
+            var receiveTask = udp.ReceiveAsync();
+            var completed = await Task.WhenAny(receiveTask, Task.Delay(800));
+
+            if (completed != receiveTask)
+                return false;
+
+            var result = receiveTask.Result;
+            if (result.Buffer == null || result.Buffer.Length == 0)
+                return false;
+
+            string xml = Encoding.UTF8.GetString(result.Buffer);
+
+            return xml.Contains("ProbeMatches", StringComparison.OrdinalIgnoreCase) ||
+                   xml.Contains("ProbeMatch", StringComparison.OrdinalIgnoreCase) ||
+                   xml.Contains("onvif", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<(string bestPort, string services)> DetectOnvifServicePortsAsync(string ip)
+    {
+        var open = new List<int>();
+        int[] onvifPorts = { 80, 443, 554, 8080, 8000, 8899 };
+
+        foreach (var port in onvifPorts)
+        {
+            if (await IsTcpPortOpenAsync(ip, port, 250))
+                open.Add(port);
+        }
+
+        string bestPort = open.Count > 0 ? open.First().ToString() : "";
+        string services = string.Join(", ", open.Select(GetServiceName));
+
+        return (bestPort, services);
     }
 
     private static string BuildOnvifProbeMessage()
@@ -734,7 +1456,7 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 <e:Envelope xmlns:e=""http://www.w3.org/2003/05/soap-envelope""
             xmlns:w=""http://schemas.xmlsoap.org/ws/2004/08/addressing""
             xmlns:d=""http://schemas.xmlsoap.org/ws/2005/04/discovery""
-            xmlns:dn=""http://www.onvif.org/ver10/network/wsdl"">
+            xmlns:tds=""http://www.onvif.org/ver10/device/wsdl"">
     <e:Header>
         <w:MessageID>{messageId}</w:MessageID>
         <w:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>
@@ -742,7 +1464,7 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
     </e:Header>
     <e:Body>
         <d:Probe>
-            <d:Types>dn:NetworkVideoTransmitter</d:Types>
+            <d:Types>tds:Device</d:Types>
         </d:Probe>
     </e:Body>
 </e:Envelope>";
@@ -754,7 +1476,6 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         {
             var doc = XDocument.Parse(xml);
 
-            XNamespace soap = "http://www.w3.org/2003/05/soap-envelope";
             XNamespace wsd = "http://schemas.xmlsoap.org/ws/2005/04/discovery";
             XNamespace wsa = "http://schemas.xmlsoap.org/ws/2004/08/addressing";
 
@@ -1034,6 +1755,7 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
             47808 => "BACnet",
             502 => "Modbus",
             3702 => "WS-Discovery",
+            8899 => "ONVIF Alt",
             _ => $"Porta {port}"
         };
     }
@@ -1052,100 +1774,109 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
             device.Protocol = "Wi-Fi";
         else if (origin.Contains("lan"))
             device.Protocol = "LAN";
-        else if (origin.Contains("bacnet"))
+        else if (origin.Contains("bacnet") || openPorts.Contains("47808"))
             device.Protocol = "BACnet/IP";
-        else if (origin.Contains("modbus"))
+        else if (origin.Contains("modbus") || openPorts.Contains("502"))
             device.Protocol = "Modbus TCP";
-        else if (origin.Contains("onvif"))
+        else if (origin.Contains("onvif") || openPorts.Contains("3702"))
             device.Protocol = "ONVIF";
         else
             device.Protocol = "Desconhecido";
 
-        if (origin.Contains("lan") && string.IsNullOrWhiteSpace(device.IpAddress))
-            device.Status = "Desconhecido";
-        else if (string.IsNullOrWhiteSpace(device.Status))
-            device.Status = "Online";
+        if (openPorts.Contains("502") || services.Contains("modbus"))
+        {
+            device.DeviceType = "PLC / Modbus Device";
+            device.Icon = "⚙️";
+            return;
+        }
 
-        if (manufacturer.Contains("kontakt"))
+        if (openPorts.Contains("47808") || services.Contains("bacnet"))
         {
-            device.DeviceType = "Beacon BLE";
-            device.Icon = "📡";
+            device.DeviceType = "Sistema BACnet";
+            device.Icon = "🏢";
+            return;
         }
-        else if (origin.Contains("onvif") || services.Contains("onvif"))
-        {
-            device.DeviceType = "Câmara ONVIF";
-            device.Icon = "🎥";
-            device.Protocol = "ONVIF";
-        }
-        else if (manufacturer.Contains("hikvision") || openPorts.Contains("8000") || services.Contains("rtsp"))
+
+        if (openPorts.Contains("554") || services.Contains("rtsp") ||
+            openPorts.Contains("8000") || manufacturer.Contains("hikvision") ||
+            openPorts.Contains("3702") || services.Contains("onvif"))
         {
             device.DeviceType = "Câmara IP";
-            device.Icon = "📷";
+            device.Icon = "🎥";
+            return;
         }
-        else if (services.Contains("modbus") || origin.Contains("modbus") || openPorts.Contains("502"))
-        {
-            device.DeviceType = "Dispositivo Modbus";
-            device.Icon = "⚙️";
-            device.Protocol = "Modbus TCP";
-        }
-        else if (services.Contains("bacnet") || origin.Contains("bacnet"))
-        {
-            device.DeviceType = "Dispositivo BACnet";
-            device.Icon = "🏢";
-            device.Protocol = "BACnet/IP";
-        }
-        else if (manufacturer.Contains("tp-link") ||
-                 manufacturer.Contains("cisco") ||
-                 manufacturer.Contains("mikrotik"))
+
+        if (manufacturer.Contains("cisco") ||
+            manufacturer.Contains("mikrotik") ||
+            manufacturer.Contains("tp-link") ||
+            manufacturer.Contains("ubiquiti") ||
+            name.Contains("router") ||
+            name.Contains("gateway"))
         {
             device.DeviceType = "Equipamento de Rede";
             device.Icon = "🌐";
+            return;
         }
-        else if (manufacturer.Contains("intel") ||
-                 manufacturer.Contains("dell") ||
-                 manufacturer.Contains("hp") ||
-                 manufacturer.Contains("lenovo"))
+
+        if (manufacturer.Contains("intel") ||
+            manufacturer.Contains("dell") ||
+            manufacturer.Contains("hp") ||
+            manufacturer.Contains("lenovo") ||
+            name.Contains("desktop") ||
+            name.Contains("laptop") ||
+            name.Contains("pc"))
         {
             device.DeviceType = "Computador";
             device.Icon = "💻";
+            return;
         }
-        else if (manufacturer.Contains("apple") ||
-                 manufacturer.Contains("samsung") ||
-                 manufacturer.Contains("xiaomi"))
+
+        if (manufacturer.Contains("apple") ||
+            manufacturer.Contains("samsung") ||
+            manufacturer.Contains("xiaomi") ||
+            name.Contains("iphone") ||
+            name.Contains("android"))
         {
             device.DeviceType = "Dispositivo Móvel";
             device.Icon = "📱";
+            return;
         }
-        else if (name.Contains("jbl") || name.Contains("edifier"))
+
+        if (name.Contains("printer") ||
+            manufacturer.Contains("epson") ||
+            manufacturer.Contains("canon") ||
+            manufacturer.Contains("brother"))
+        {
+            device.DeviceType = "Impressora";
+            device.Icon = "🖨️";
+            return;
+        }
+
+        if (name.Contains("jbl") ||
+            name.Contains("speaker") ||
+            name.Contains("audio"))
         {
             device.DeviceType = "Dispositivo Áudio";
             device.Icon = "🎧";
+            return;
         }
-        else if (services.Contains("http") || services.Contains("https"))
-        {
-            device.DeviceType = "Dispositivo Web";
-            device.Icon = "🖥️";
-        }
-        else if (origin.Contains("bluetooth"))
+
+        if (origin.Contains("bluetooth"))
         {
             device.DeviceType = "Dispositivo BLE";
             device.Icon = "📶";
+            return;
         }
-        else if (origin.Contains("wifi"))
+
+        if (origin.Contains("wifi"))
         {
-            device.DeviceType = "Rede Wi-Fi";
+            device.DeviceType = "Dispositivo Wi-Fi";
             device.Icon = "📡";
+            return;
         }
-        else if (origin.Contains("lan"))
-        {
-            device.DeviceType = "Dispositivo LAN";
-            device.Icon = "🖧";
-        }
-        else
-        {
-            device.DeviceType = "Desconhecido";
-            device.Icon = "❓";
-        }
+
+        device.DeviceType = "Dispositivo Desconhecido";
+        device.Icon = "❓";
     }
 
     private void ApplyFilters()
@@ -1165,16 +1896,14 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         if (!string.IsNullOrWhiteSpace(manufacturerFilter))
             query = query.Where(d => (d.Manufacturer ?? "").Contains(manufacturerFilter, StringComparison.OrdinalIgnoreCase));
 
-        var filteredList = query.ToList();
+        var filteredList = query
+            .OrderByDescending(d => d.Status.Equals("Online", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(d => d.Origin)
+            .ThenBy(d => d.Name)
+            .ToList();
 
-        DevicesGrid.ItemsSource = null;
         DevicesGrid.ItemsSource = filteredList;
-
-        if (filteredList.Count > 0)
-            DevicesGrid.SelectedIndex = 0;
-
-        UpdateSummaryCards(filteredList);
-        UpdateDetailsStatusBadge();
+        UpdateSummaryCards(_allDevices);
     }
 
     private void UpdateSummaryCards(IEnumerable<DeviceInfo> devices)
@@ -1191,37 +1920,73 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         OnlineCountText.Text = list.Count(d => d.Status.Equals("Online", StringComparison.OrdinalIgnoreCase)).ToString();
     }
 
-    private void UpdateDetailsStatusBadge()
+    private void UpdateShadowCount()
     {
-        if (DevicesGrid.SelectedItem is not DeviceInfo device)
+        ShadowCountText.Text = $"{_shadowDevices.Count} novos";
+    }
+
+    private void ExportCsv_Click(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            DetailsStatusBadge.Background = System.Windows.Media.Brushes.LightGray;
-            DetailsStatusText.Foreground = System.Windows.Media.Brushes.DimGray;
-            return;
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = "devices_export",
+                DefaultExt = ".csv",
+                Filter = "CSV files (.csv)|*.csv"
+            };
+
+            bool? result = dialog.ShowDialog();
+
+            if (result == true)
+            {
+                var exportDevices = GetDevicesToExport();
+                var lines = new List<string>();
+
+                lines.Add("ID,Origem,Tipo,Nome,Fabricante,MAC,IP,Estado,Protocolo,PortasAbertas,Servicos,RSSI,DistanciaMetros,UltimaDetecao,BacnetDeviceId,BacnetVendor,BacnetModelo,BacnetFirmware,BacnetObjetos,ModbusUnitId,ModbusRegistos,OnvifXAddr,OnvifScopes,OnvifEndpoint");
+
+                foreach (var device in exportDevices)
+                {
+                    lines.Add(string.Join(",",
+                        EscapeCsv(device.Id),
+                        EscapeCsv(device.Origin),
+                        EscapeCsv(device.DeviceType),
+                        EscapeCsv(device.Name),
+                        EscapeCsv(device.Manufacturer),
+                        EscapeCsv(device.MacAddress),
+                        EscapeCsv(device.IpAddress),
+                        EscapeCsv(device.Status),
+                        EscapeCsv(device.Protocol),
+                        EscapeCsv(device.OpenPorts),
+                        EscapeCsv(device.DetectedServices),
+                        EscapeCsv(device.Rssi?.ToString() ?? ""),
+                        EscapeCsv(device.EstimatedDistanceMeters?.ToString() ?? ""),
+                        EscapeCsv(device.LastSeen == DateTime.MinValue ? "" : device.LastSeen.ToString("yyyy-MM-dd HH:mm:ss")),
+                        EscapeCsv(device.BacnetDeviceId?.ToString() ?? ""),
+                        EscapeCsv(device.BacnetVendorName),
+                        EscapeCsv(device.BacnetModelName),
+                        EscapeCsv(device.BacnetFirmware),
+                        EscapeCsv(device.BacnetObjectSummary),
+                        EscapeCsv(device.ModbusUnitId?.ToString() ?? ""),
+                        EscapeCsv(device.ModbusRegisterSummary),
+                        EscapeCsv(device.OnvifXAddr),
+                        EscapeCsv(device.OnvifScopes),
+                        EscapeCsv(device.OnvifEndpointAddress)
+                    ));
+                }
+
+                System.IO.File.WriteAllLines(dialog.FileName, lines, Encoding.UTF8);
+
+                MessageBox.Show(
+                    $"Exportação CSV concluída! {exportDevices.Count} dispositivo(s) exportado(s).",
+                    "Export CSV",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
         }
-
-        switch (device.Status)
+        catch (Exception ex)
         {
-            case "Online":
-                DetailsStatusBadge.Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#DCFCE7"));
-                DetailsStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#166534"));
-                break;
-
-            case "Offline":
-                DetailsStatusBadge.Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FEE2E2"));
-                DetailsStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#991B1B"));
-                break;
-
-            default:
-                DetailsStatusBadge.Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FEF3C7"));
-                DetailsStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#92400E"));
-                break;
+            MessageBox.Show($"Erro ao exportar CSV: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1233,24 +1998,26 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
             {
                 FileName = "devices_export",
                 DefaultExt = ".txt",
-                Filter = "Text documents (.txt)|*.txt"
+                Filter = "Text files (.txt)|*.txt"
             };
 
             bool? result = dialog.ShowDialog();
 
             if (result == true)
             {
+                var exportDevices = GetDevicesToExport();
                 var lines = new List<string>();
 
                 lines.Add("LOCAL DEVICE MONITOR");
-                lines.Add("Exportação de dispositivos da rede");
-                lines.Add($"Data: {DateTime.Now}");
+                lines.Add("Exportação de dispositivos");
+                lines.Add($"Data: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                lines.Add($"Registos exportados: {exportDevices.Count}");
                 lines.Add("--------------------------------------------------");
                 lines.Add("");
 
                 int i = 1;
 
-                foreach (var device in _allDevices)
+                foreach (var device in exportDevices)
                 {
                     lines.Add($"Dispositivo {i}");
                     lines.Add($"ID: {device.Id}");
@@ -1262,14 +2029,15 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
                     lines.Add($"IP: {device.IpAddress}");
                     lines.Add($"Estado: {device.Status}");
                     lines.Add($"Protocolo: {device.Protocol}");
-                    lines.Add($"Portas abertas: {device.OpenPorts}");
+                    lines.Add($"Portas: {device.OpenPorts}");
                     lines.Add($"Serviços: {device.DetectedServices}");
                     lines.Add($"RSSI: {device.Rssi}");
-                    lines.Add($"Distância: {device.EstimatedDistanceMeters} m");
+                    lines.Add($"Distância: {device.EstimatedDistanceMeters}");
+                    lines.Add($"Última deteção: {device.LastSeen}");
 
                     if (device.Origin.Equals("BACNET", StringComparison.OrdinalIgnoreCase))
                     {
-                        lines.Add($"BACnet Device ID: {device.BacnetDeviceId}");
+                        lines.Add($"BACnet ID: {device.BacnetDeviceId}");
                         lines.Add($"BACnet Vendor: {device.BacnetVendorName}");
                         lines.Add($"BACnet Modelo: {device.BacnetModelName}");
                         lines.Add($"BACnet Firmware: {device.BacnetFirmware}");
@@ -1278,8 +2046,8 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
                     if (device.Origin.Equals("MODBUS", StringComparison.OrdinalIgnoreCase))
                     {
-                        lines.Add($"Modbus Unit ID: {device.ModbusUnitId}");
-                        lines.Add($"Modbus Registos: {device.ModbusRegisterSummary}");
+                        lines.Add($"Modbus Unit: {device.ModbusUnitId}");
+                        lines.Add($"Registos: {device.ModbusRegisterSummary}");
                     }
 
                     if (device.Origin.Equals("ONVIF", StringComparison.OrdinalIgnoreCase))
@@ -1295,15 +2063,36 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
                     i++;
                 }
 
-                System.IO.File.WriteAllLines(dialog.FileName, lines);
+                System.IO.File.WriteAllLines(dialog.FileName, lines, Encoding.UTF8);
 
-                MessageBox.Show("Exportação TXT concluída!", "Export TXT", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(
+                    $"Exportação TXT concluída! {exportDevices.Count} dispositivo(s) exportado(s).",
+                    "Export TXT",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Erro ao exportar TXT: {ex.Message}");
+            MessageBox.Show($"Erro ao exportar TXT: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private List<DeviceInfo> GetDevicesToExport()
+    {
+        if (DevicesGrid.ItemsSource is IEnumerable<DeviceInfo> visibleDevices)
+            return visibleDevices.ToList();
+
+        return _allDevices.ToList();
+    }
+
+    private static string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "\"\"";
+
+        value = value.Replace("\"", "\"\"");
+        return $"\"{value}\"";
     }
 
     private string GetSelectedOrigin()
@@ -1331,6 +2120,57 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         var output = await process.StandardOutput.ReadToEndAsync();
         await process.WaitForExitAsync();
         return output;
+    }
+
+    private string GetBluetoothCompanyName(ushort companyId)
+    {
+        if (BluetoothCompanies.TryGetValue(companyId, out var name))
+            return name;
+
+        return $"CompanyID {companyId}";
+    }
+
+    private void EnrichManufacturerFromMac(DeviceInfo device)
+    {
+        if (device == null)
+            return;
+
+        var vendor = GetVendorFromMac(device.MacAddress);
+        if (string.IsNullOrWhiteSpace(vendor))
+            return;
+
+        if (string.IsNullOrWhiteSpace(device.Manufacturer) ||
+            device.Manufacturer.Equals("Desconhecido", StringComparison.OrdinalIgnoreCase) ||
+            device.Manufacturer.Equals("LAN Host", StringComparison.OrdinalIgnoreCase) ||
+            device.Manufacturer.Equals("WiFi Client", StringComparison.OrdinalIgnoreCase) ||
+            device.Manufacturer.Equals("WiFi Access Point", StringComparison.OrdinalIgnoreCase) ||
+            device.Manufacturer.StartsWith("CompanyID ", StringComparison.OrdinalIgnoreCase))
+        {
+            device.Manufacturer = vendor;
+        }
+    }
+
+    private string GetVendorFromMac(string? macAddress)
+    {
+        if (string.IsNullOrWhiteSpace(macAddress))
+            return "";
+
+        var normalized = NormalizeMacForOui(macAddress);
+        if (normalized.Length < 6)
+            return "";
+
+        var oui = normalized.Substring(0, 6);
+
+        if (OuiVendors.TryGetValue(oui, out var vendor))
+            return vendor;
+
+        return "";
+    }
+
+    private static string NormalizeMacForOui(string macAddress)
+    {
+        return Regex.Replace(macAddress ?? "", "[^0-9A-Fa-f]", "")
+            .ToUpperInvariant();
     }
 
     private static int ConvertPercentToRssi(int percent)
@@ -1372,5 +2212,89 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
             var bytes = BitConverter.GetBytes(i).Reverse().ToArray();
             yield return new IPAddress(bytes);
         }
+    }
+
+    private static IEnumerable<IPAddress> GetBroadcastAddresses()
+    {
+        foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (ni.OperationalStatus != OperationalStatus.Up)
+                continue;
+
+            if (ni.NetworkInterfaceType != NetworkInterfaceType.Ethernet &&
+                ni.NetworkInterfaceType != NetworkInterfaceType.Wireless80211)
+                continue;
+
+            var ipProps = ni.GetIPProperties();
+
+            foreach (var uni in ipProps.UnicastAddresses)
+            {
+                if (uni.Address.AddressFamily != AddressFamily.InterNetwork || uni.IPv4Mask == null)
+                    continue;
+
+                var ipBytes = uni.Address.GetAddressBytes();
+                var maskBytes = uni.IPv4Mask.GetAddressBytes();
+                var broadcast = new byte[4];
+
+                for (int i = 0; i < 4; i++)
+                    broadcast[i] = (byte)(ipBytes[i] | ~maskBytes[i]);
+
+                yield return new IPAddress(broadcast);
+            }
+        }
+    }
+
+    private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isDarkMode = !_isDarkMode;
+
+        if (_isDarkMode)
+            ApplyDarkTheme();
+        else
+            ApplyLightTheme();
+    }
+
+    private void ApplyLightTheme()
+    {
+        SetBrush("AppWindowBackgroundBrush", "#EEF3F9");
+        SetBrush("PanelBrush", "#FFFFFF");
+        SetBrush("CardBrush", "#FFFFFF");
+        SetBrush("BorderBrushTheme", "#DCE5F1");
+        SetBrush("PrimaryTextBrush", "#0F172A");
+        SetBrush("SecondaryTextBrush", "#64748B");
+        SetBrush("GridHeaderBrush", "#F7FAFE");
+        SetBrush("GridRowBrush", "#FFFFFF");
+        SetBrush("GridAltRowBrush", "#FAFCFF");
+        SetBrush("GridHoverBrush", "#F2F7FF");
+        SetBrush("GridSelectedBrush", "#DBEAFE");
+        SetBrush("InputBackgroundBrush", "#F8FAFC");
+        SetBrush("InputBorderBrush", "#CBD5E1");
+
+        ThemeToggleButton.Content = "🌙";
+    }
+
+    private void ApplyDarkTheme()
+    {
+        SetBrush("AppWindowBackgroundBrush", "#0B1220");
+        SetBrush("PanelBrush", "#111827");
+        SetBrush("CardBrush", "#111827");
+        SetBrush("BorderBrushTheme", "#334155");
+        SetBrush("PrimaryTextBrush", "#E5E7EB");
+        SetBrush("SecondaryTextBrush", "#94A3B8");
+        SetBrush("GridHeaderBrush", "#1F2937");
+        SetBrush("GridRowBrush", "#111827");
+        SetBrush("GridAltRowBrush", "#172033");
+        SetBrush("GridHoverBrush", "#1E293B");
+        SetBrush("GridSelectedBrush", "#1D4ED8");
+        SetBrush("InputBackgroundBrush", "#0F172A");
+        SetBrush("InputBorderBrush", "#334155");
+
+        ThemeToggleButton.Content = "☀️";
+    }
+
+    private void SetBrush(string key, string hexColor)
+    {
+        Resources[key] = new System.Windows.Media.SolidColorBrush(
+            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hexColor));
     }
 }

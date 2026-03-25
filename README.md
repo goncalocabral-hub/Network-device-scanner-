@@ -4,7 +4,10 @@ Projeto WPF em C# / .NET 8 com 3 opções de scan:
 - BLE real
 - WIFI real (redes visíveis via netsh)
 - LAN real (ping + arp)
-
+- ModBus
+- lan 
+- Onvif
+ 
 ## Como abrir
 1. Extrair o ZIP
 2. Abrir `LocalDeviceMonitor.sln`
