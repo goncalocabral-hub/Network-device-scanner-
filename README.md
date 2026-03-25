@@ -1,4 +1,4 @@
-# LocalDeviceMonitor - BLE + WIFI + LAN
+# LocalDeviceMonitor - BLE + WIFI + LAN + MODBUS + ONVIF 
 
 Projeto WPF em C# / .NET 8 com 3 opções de scan:
 - BLE real
