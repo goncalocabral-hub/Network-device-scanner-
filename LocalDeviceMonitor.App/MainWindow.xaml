@@ -171,7 +171,6 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- HEADER -->
         <Border Grid.Row="0"
                 CornerRadius="22"
                 Padding="0"
@@ -307,7 +306,6 @@
             </Grid>
         </Border>
 
-        <!-- FILTERS + SUMMARY -->
         <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -447,7 +445,6 @@
             </primitives:UniformGrid>
         </Grid>
 
-        <!-- TABS -->
         <TabControl Grid.Row="2"
                     Background="Transparent"
                     BorderThickness="0">
@@ -468,94 +465,129 @@
 
                         <DockPanel Grid.Row="0" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                                <TextBlock Text="Dispositivos Detetados"
-                                           FontSize="18"
-                                           FontWeight="Bold"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <Border Background="#E0E7FF"
-                                        CornerRadius="10"
-                                        Padding="8,3"
-                                        Margin="10,0,0,0"
-                                        VerticalAlignment="Center">
-                                    <TextBlock Text="Vista principal"
-                                               FontSize="11"
-                                               FontWeight="SemiBold"
-                                               Foreground="#3730A3"/>
+                                <TextBlock Text="Dispositivos Detetados" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <Border Background="#E0E7FF" CornerRadius="10" Padding="8,3" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Vista principal" FontSize="11" FontWeight="SemiBold" Foreground="#3730A3"/>
                                 </Border>
                             </StackPanel>
-
-                            <TextBlock DockPanel.Dock="Right"
-                                       Text="Estado, protocolo, serviços e portas abertas"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"/>
+                            <TextBlock DockPanel.Dock="Right" Text="Selecione para ver detalhes. Duplo clique para painel completo." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center"/>
                         </DockPanel>
 
-                        <DataGrid Grid.Row="1"
-                                  x:Name="DevicesGrid"
-                                  AutoGenerateColumns="False"
-                                  IsReadOnly="True"
-                                  CanUserAddRows="False"
-                                  CanUserDeleteRows="False"
-                                  SelectionMode="Single"
-                                  GridLinesVisibility="Horizontal"
-                                  HeadersVisibility="Column"
-                                  RowHeaderWidth="0"
-                                  BorderThickness="0"
-                                  Background="Transparent"
-                                  AlternatingRowBackground="{DynamicResource GridAltRowBrush}"
-                                  RowBackground="{DynamicResource GridRowBrush}"
-                                  HorizontalGridLinesBrush="{DynamicResource BorderBrushTheme}"
-                                  VerticalGridLinesBrush="{DynamicResource BorderBrushTheme}"
-                                  FontSize="13">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="" Binding="{Binding Icon}" Width="50"/>
-                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="150"/>
-                                <DataGridTextColumn Header="Origem" Binding="{Binding Origin}" Width="100"/>
-                                <DataGridTextColumn Header="Tipo de Dispositivo" Binding="{Binding DeviceType}" Width="185"/>
-                                <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="200"/>
-                                <DataGridTextColumn Header="Fabricante" Binding="{Binding Manufacturer}" Width="170"/>
-                                <DataGridTextColumn Header="MAC / BSSID" Binding="{Binding MacAddress}" Width="180"/>
-                                <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="140"/>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                                <DataGridTemplateColumn Header="Estado" Width="120">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Border x:Name="StatusBadge"
-                                                    CornerRadius="12"
-                                                    Padding="10,4"
-                                                    HorizontalAlignment="Left"
-                                                    Background="#E5E7EB">
-                                                <TextBlock x:Name="StatusText"
-                                                           Text="{Binding Status}"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="#374151"/>
-                                            </Border>
-                                            <DataTemplate.Triggers>
-                                                <DataTrigger Binding="{Binding Status}" Value="Online">
-                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#DCFCE7"/>
-                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#166534"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Status}" Value="Offline">
-                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#FEE2E2"/>
-                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#991B1B"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Status}" Value="Desconhecido">
-                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#FEF3C7"/>
-                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#92400E"/>
-                                                </DataTrigger>
-                                            </DataTemplate.Triggers>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
+                            <DataGrid Grid.Column="0"
+                                      x:Name="DevicesGrid"
+                                      Margin="0,0,15,0"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      SelectionMode="Single"
+                                      HeadersVisibility="Column"
+                                      RowHeaderWidth="0"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      AlternatingRowBackground="{DynamicResource GridAltRowBrush}"
+                                      RowBackground="{DynamicResource GridRowBrush}"
+                                      HorizontalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                      VerticalGridLinesBrush="{DynamicResource BorderBrushTheme}"
+                                      FontSize="13"
+                                      MouseDoubleClick="DataGrid_MouseDoubleClick">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="" Binding="{Binding Icon}" Width="50"/>
+                                    <DataGridTextColumn Header="Origem" Binding="{Binding Origin}" Width="100"/>
+                                    <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="250"/>
+                                    <DataGridTextColumn Header="Fabricante" Binding="{Binding Manufacturer}" Width="200"/>
+                                    <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="140"/>
+                                    <DataGridTemplateColumn Header="Estado" Width="120">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="StatusBadge" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left" Background="#E5E7EB">
+                                                    <TextBlock x:Name="StatusText" Text="{Binding Status}" FontWeight="SemiBold" Foreground="#374151"/>
+                                                </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Online">
+                                                        <Setter TargetName="StatusBadge" Property="Background" Value="#DCFCE7"/>
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="#166534"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                        <Setter TargetName="StatusBadge" Property="Background" Value="#FEE2E2"/>
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="#991B1B"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Desconhecido">
+                                                        <Setter TargetName="StatusBadge" Property="Background" Value="#FEF3C7"/>
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="#92400E"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Protocolo" Binding="{Binding Protocol}" Width="150"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
 
-                                <DataGridTextColumn Header="Protocolo" Binding="{Binding Protocol}" Width="115"/>
-                                <DataGridTextColumn Header="Portas" Binding="{Binding OpenPorts}" Width="130"/>
-                                <DataGridTextColumn Header="Serviços" Binding="{Binding DetectedServices}" Width="280"/>
-                                <DataGridTextColumn Header="RSSI" Binding="{Binding Rssi}" Width="75"/>
-                                <DataGridTextColumn Header="Distância (m)" Binding="{Binding EstimatedDistanceMeters}" Width="120"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                            <Border Grid.Column="1" 
+                                    Width="320"
+                                    DataContext="{Binding SelectedItem, ElementName=DevicesGrid}"
+                                    Background="{DynamicResource InputBackgroundBrush}" 
+                                    BorderBrush="{DynamicResource BorderBrushTheme}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="12" 
+                                    Padding="20">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Icon}" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                        <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding DeviceType}" FontSize="13" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Center" Margin="0,5,0,20"/>
+
+                                        <Separator Margin="0,0,0,15" Background="{DynamicResource BorderBrushTheme}"/>
+
+                                        <StackPanel Margin="0,0,0,15">
+                                            <TextBlock Text="Endereço IP" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding IpAddress}" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Medium"/>
+                                        </StackPanel>
+
+                                        <StackPanel Margin="0,0,0,15">
+                                            <TextBlock Text="MAC Address" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding MacAddress}" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Medium"/>
+                                        </StackPanel>
+
+                                        <StackPanel Margin="0,0,0,25">
+                                            <TextBlock Text="Portas Abertas" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding OpenPorts}" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                        <Button Content="Detalhes Completos" Height="35" Style="{StaticResource AccentButtonStyle}" Margin="0,0,0,15" Click="OpenDetailsWindow_Click"/>
+
+                                        <Grid Margin="0,0,0,20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Content="🔍 Ping" Height="35" Style="{StaticResource SecondaryButtonStyle}" Click="PingDevice_Click" Margin="0"/>
+                                            <Button Grid.Column="2" Content="🌐 Abrir IP" Height="35" Style="{StaticResource SecondaryButtonStyle}" Click="OpenBrowser_Click" Margin="0"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
                     </Grid>
                 </Border>
             </TabItem>
