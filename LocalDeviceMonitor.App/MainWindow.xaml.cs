@@ -1,7 +1,10 @@
+using NModbus;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO.BACnet;
+using System.IO.BACnet.Serialize;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -12,12 +15,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using System.Xml.Linq;
 using Windows.Devices.Bluetooth.Advertisement;
-using System.IO.BACnet;
-using System.IO.BACnet.Serialize;
-using NModbus;
 
 namespace LocalDeviceMonitor.App;
 
@@ -59,7 +60,8 @@ public partial class MainWindow : Window
         { 147, "Universal Electronics, Inc." },
         { 1704, "GD Midea Air-Conditioning Equipment Co., Ltd."},
         { 34818, "Ningbo Joyson Electronic Corp." },
-        { 20 , "Mitsubishi Electric Corporation" }
+        { 20 , "Mitsubishi Electric Corporation" },
+        { 41488, "Xiaomi Inc. " }
     };
 
     private static readonly Dictionary<string, string> OuiVendors = new(StringComparer.OrdinalIgnoreCase)
@@ -119,6 +121,9 @@ public partial class MainWindow : Window
         DevicesGrid.ItemsSource = _allDevices;
         ShadowGrid.ItemsSource = _shadowDevices;
 
+        DevicesGrid.MouseDoubleClick += DataGrid_MouseDoubleClick;
+        ShadowGrid.MouseDoubleClick += DataGrid_MouseDoubleClick;
+
         OriginComboBox.SelectedIndex = 0;
         StatusTextBlock.Text = "Pronto.";
         UpdateSummaryCards(_allDevices);
@@ -127,6 +132,97 @@ public partial class MainWindow : Window
 
         _scanTimer.Interval = TimeSpan.FromSeconds(12);
         _scanTimer.Tick += ScanTimer_Tick;
+    }
+
+
+    private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // 1. Tenta descobrir qual foi o elemento visual exato onde clicaste
+        DependencyObject dep = (DependencyObject)e.OriginalSource;
+
+        // 2. Sobe na "árvore" de elementos do WPF até encontrar a Célula da grelha
+        while (dep != null && !(dep is DataGridCell))
+        {
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+        }
+
+        // 3. Se encontrou a célula, extrai o texto e copia para o Clipboard
+        if (dep is DataGridCell cell && cell.Content is TextBlock textBlock)
+        {
+            string valorCopiado = textBlock.Text;
+
+            if (!string.IsNullOrWhiteSpace(valorCopiado))
+            {
+                Clipboard.SetText(valorCopiado);
+
+                // Reutiliza o Toast para avisar que copiou! (Dura 4 segundos)
+                ShowToast("Copiado!", valorCopiado, 4);
+            }
+        }
+    }
+
+
+    private async void PingDevice_Click(object sender, RoutedEventArgs e)
+    {
+        // Verifica se há um dispositivo selecionado e se ele tem IP
+        if (DevicesGrid.SelectedItem is DeviceInfo device && !string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            ShowToast("A testar ligação...", $"A enviar ping para {device.IpAddress}", 2);
+
+            try
+            {
+                using var ping = new Ping();
+                // Usa SendPingAsync para não congelar a interface enquanto espera!
+                var reply = await ping.SendPingAsync(device.IpAddress, 2000); // Timeout de 2 segundos
+
+                if (reply.Status == IPStatus.Success)
+                {
+                    ShowToast("✅ Ping Sucesso!", $"{device.IpAddress} respondeu em {reply.RoundtripTime}ms", 4);
+                }
+                else
+                {
+                    ShowToast("❌ Ping Falhou", $"O dispositivo não respondeu ({reply.Status})", 4);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowToast("⚠️ Erro no Ping", ex.Message, 4);
+            }
+        }
+        else
+        {
+            ShowToast("Aviso", "O dispositivo selecionado não tem um endereço IP válido.", 3);
+        }
+    }
+
+    private void OpenBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        // Verifica se há um dispositivo selecionado e se ele tem IP
+        if (DevicesGrid.SelectedItem is DeviceInfo device && !string.IsNullOrWhiteSpace(device.IpAddress))
+        {
+            try
+            {
+                // Constrói o URL (assume HTTP, o próprio browser faz o upgrade para HTTPS se necessário)
+                string url = $"http://{device.IpAddress}";
+
+                // Lança o processo predefinido do Windows para abrir links (o teu browser padrão)
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+
+                ShowToast("A abrir Browser...", $"A redirecionar para {url}", 2);
+            }
+            catch (Exception ex)
+            {
+                ShowToast("⚠️ Erro", $"Não foi possível abrir o browser: {ex.Message}", 4);
+            }
+        }
+        else
+        {
+            ShowToast("Aviso", "O dispositivo selecionado não tem um endereço IP válido.", 3);
+        }
     }
 
     private async void Scan_Click(object sender, RoutedEventArgs e)
@@ -217,11 +313,7 @@ public partial class MainWindow : Window
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show(
-                            $"{_newDevicesThisScan} novos dispositivos detetados",
-                            "Shadow IT Detection",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                        ShowToast("Shadow IT Detection", $"{_newDevicesThisScan} novos dispositivos detetados", 6);
                     });
                 }
             }
@@ -240,6 +332,84 @@ public partial class MainWindow : Window
             _isScanRunning = false;
         }
     }
+
+    private async void ShowToast(string title, string message, int durationSeconds = 3)
+    {
+        // Cria uma janela invisível e flutuante
+        var toastWindow = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            Topmost = true,
+            ShowActivated = false, // Não rouba o foco
+            ShowInTaskbar = false,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            IsHitTestVisible = false // Impede que bloqueie cliques noutras coisas
+        };
+
+        // Estiliza o "card" do Toast usando as tuas cores do tema
+        var border = new Border
+        {
+            Background = (System.Windows.Media.Brush)FindResource("CardBrush"),
+            BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrushTheme"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Margin = new Thickness(15),
+            Padding = new Thickness(20, 15, 20, 15),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 15,
+                ShadowDepth = 4,
+                Opacity = 0.2
+            }
+        };
+
+        var stack = new StackPanel();
+
+        // Título
+        stack.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.Bold,
+            FontSize = 14,
+            Foreground = (System.Windows.Media.Brush)FindResource("PrimaryTextBrush"),
+            Margin = new Thickness(0, 0, 0, 5)
+        });
+
+        // Mensagem
+        stack.Children.Add(new TextBlock
+        {
+            Text = message,
+            Foreground = (System.Windows.Media.Brush)FindResource("SecondaryTextBrush")
+        });
+
+        border.Child = stack;
+        toastWindow.Content = border;
+
+        // Posiciona o Toast no canto inferior direito da tua MainWindow
+        toastWindow.Loaded += (s, e) =>
+        {
+            toastWindow.Left = this.Left + this.ActualWidth - toastWindow.ActualWidth - 20;
+            toastWindow.Top = this.Top + this.ActualHeight - toastWindow.ActualHeight - 20;
+        };
+
+        // Mostra o Toast
+        toastWindow.Show();
+
+        // Espera os segundos definidos
+        await Task.Delay(durationSeconds * 1000);
+
+        // Animação de fade-out rápida
+        while (toastWindow.Opacity > 0)
+        {
+            toastWindow.Opacity -= 0.1;
+            await Task.Delay(20);
+        }
+
+        toastWindow.Close();
+    }
+    
 
     private async Task<List<DeviceInfo>> DiscoverDevicesAsync()
     {
@@ -361,18 +531,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        // 5. Fabricante + tipo + origem
-        if (!string.IsNullOrWhiteSpace(a.Manufacturer) &&
-            !string.IsNullOrWhiteSpace(b.Manufacturer) &&
-            !string.IsNullOrWhiteSpace(a.DeviceType) &&
-            !string.IsNullOrWhiteSpace(b.DeviceType) &&
-            string.Equals(NormalizeValue(a.Manufacturer), NormalizeValue(b.Manufacturer), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(NormalizeValue(a.DeviceType), NormalizeValue(b.DeviceType), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(NormalizeValue(a.Origin), NormalizeValue(b.Origin), StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
         return false;
     }
 
@@ -381,7 +539,6 @@ public partial class MainWindow : Window
         string origin = NormalizeValue(device.Origin);
         string name = NormalizeValue(device.Name);
         string manufacturer = NormalizeValue(device.Manufacturer);
-        string deviceType = NormalizeValue(device.DeviceType);
 
         if (!string.IsNullOrWhiteSpace(device.MacAddress))
             return $"mac:{NormalizeValue(device.MacAddress)}";
@@ -395,7 +552,7 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(device.IpAddress) && !string.IsNullOrWhiteSpace(name))
             return $"ipn:{origin}|{NormalizeValue(device.IpAddress)}|{name}";
 
-        return $"fallback:{origin}|{manufacturer}|{deviceType}|{name}";
+        return $"fallback:{origin}|{name}";
     }
 
     private static string NormalizeValue(string? value)
@@ -423,8 +580,10 @@ public partial class MainWindow : Window
         existing.Manufacturer = scannedDevice.Manufacturer;
         existing.MacAddress = scannedDevice.MacAddress;
         existing.IpAddress = scannedDevice.IpAddress;
+        
         existing.Status = "Online";
         existing.LastSeen = DateTime.Now;
+        
         existing.Protocol = scannedDevice.Protocol;
         existing.Rssi = scannedDevice.Rssi;
         existing.EstimatedDistanceMeters = scannedDevice.EstimatedDistanceMeters;
@@ -2292,9 +2451,54 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         ThemeToggleButton.Content = "☀️";
     }
 
+
     private void SetBrush(string key, string hexColor)
     {
         Resources[key] = new System.Windows.Media.SolidColorBrush(
             (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hexColor));
+    }
+
+    private void OpenDetailsWindow_Click(object sender, RoutedEventArgs e)
+    {
+        var device = DevicesGrid.SelectedItem as DeviceInfo;
+        if (device == null)
+        {
+            MessageBox.Show("Selecione um dispositivo para ver os detalhes.", "Detalhes", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Nome: {device.Name}");
+        sb.AppendLine($"Origem: {device.Origin}");
+        sb.AppendLine($"Tipo: {device.DeviceType}");
+        sb.AppendLine($"Fabricante: {device.Manufacturer}");
+        sb.AppendLine($"MAC: {device.MacAddress}");
+        sb.AppendLine($"IP: {device.IpAddress}");
+        sb.AppendLine($"Estado: {device.Status}");
+        sb.AppendLine($"Protocolo: {device.Protocol}");
+        sb.AppendLine($"Portas: {device.OpenPorts}");
+        sb.AppendLine($"Serviços: {device.DetectedServices}");
+
+        if (device.Rssi.HasValue)
+            sb.AppendLine($"RSSI: {device.Rssi}");
+        if (device.EstimatedDistanceMeters.HasValue)
+            sb.AppendLine($"Distância (m): {device.EstimatedDistanceMeters}");
+
+        sb.AppendLine($"Última deteção: {device.LastSeen}");
+
+        if (device.BacnetDeviceId.HasValue || !string.IsNullOrWhiteSpace(device.BacnetVendorName))
+        {
+            sb.AppendLine($"BACnet ID: {device.BacnetDeviceId}");
+            sb.AppendLine($"BACnet Vendor: {device.BacnetVendorName}");
+            sb.AppendLine($"BACnet Modelo: {device.BacnetModelName}");
+        }
+
+        if (device.ModbusUnitId.HasValue)
+            sb.AppendLine($"Modbus Unit: {device.ModbusUnitId}");
+
+        if (!string.IsNullOrWhiteSpace(device.OnvifXAddr))
+            sb.AppendLine($"ONVIF XAddr: {device.OnvifXAddr}");
+
+        MessageBox.Show(sb.ToString(), "Detalhes do Dispositivo", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }
