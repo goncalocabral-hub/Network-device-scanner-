@@ -2,6 +2,7 @@ Network Device Scanner
 
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/7f886a4d-7280-4e52-8f5d-4419c7150383" />
 
+
 📌 Description
 
 Desktop application developed in C# (WPF) for monitoring and identifying devices within a local network, supporting multiple discovery and communication protocols.
