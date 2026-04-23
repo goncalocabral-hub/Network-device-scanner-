@@ -146,7 +146,7 @@ public partial class MainWindow : Window
             dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
         }
 
-        // 3. Se encontrou a célula, extrai o texto e copia para o Clipboard
+        // 3. Extrai o texto e copia para o Clipboard
         if (dep is DataGridCell cell && cell.Content is TextBlock textBlock)
         {
             string valorCopiado = textBlock.Text;
@@ -580,10 +580,10 @@ public partial class MainWindow : Window
         existing.Manufacturer = scannedDevice.Manufacturer;
         existing.MacAddress = scannedDevice.MacAddress;
         existing.IpAddress = scannedDevice.IpAddress;
-        
+
         existing.Status = "Online";
         existing.LastSeen = DateTime.Now;
-        
+
         existing.Protocol = scannedDevice.Protocol;
         existing.Rssi = scannedDevice.Rssi;
         existing.EstimatedDistanceMeters = scannedDevice.EstimatedDistanceMeters;
@@ -603,6 +603,7 @@ public partial class MainWindow : Window
         existing.OnvifScopes = scannedDevice.OnvifScopes;
         existing.OnvifEndpointAddress = scannedDevice.OnvifEndpointAddress;
     }
+
 
     private void MarkOfflineDevices()
     {
@@ -708,7 +709,7 @@ public partial class MainWindow : Window
         {
             var line = raw.Trim();
 
-            if (line.StartsWith("SSID ", StringComparison.OrdinalIgnoreCase))
+                if (line.StartsWith("SSID ", StringComparison.OrdinalIgnoreCase))
             {
                 var idx = line.IndexOf(':');
                 currentSsid = idx >= 0 ? line[(idx + 1)..].Trim() : "";
