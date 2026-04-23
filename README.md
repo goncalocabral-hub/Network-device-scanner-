@@ -37,6 +37,7 @@ The application is structured in multiple layers:
   - LAN Scanner
   - BACnet/IP Scanner
   - Modbus TCP Scanner
+  - ONVIF Scanner
   - Device Management Layer
   - Baseline Manager
   - Stores the initial network state and compares it with future scans.
