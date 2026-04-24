@@ -19,6 +19,9 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using System.Xml.Linq;
 using Windows.Devices.Bluetooth.Advertisement;
+using LocalDeviceMonitor.App.Modelos;
+
+
 
 namespace LocalDeviceMonitor.App;
 
@@ -37,6 +40,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _scanTimer = new();
     private bool _isContinuousScanEnabled = false;
     private bool _isScanRunning = false;
+
+    private readonly AssetRepository _repo = new();
 
     private static readonly int[] CommonPorts =
     {
@@ -130,10 +135,29 @@ public partial class MainWindow : Window
         UpdateShadowCount();
         ApplyLightTheme();
 
+
+        var db = new AssetDatabase();
+        db.EnsureDatabaseCreated();
+        
+        LoadFiltroAtributos();
+
         _scanTimer.Interval = TimeSpan.FromSeconds(12);
         _scanTimer.Tick += ScanTimer_Tick;
     }
 
+    private void LoadFiltroAtributos()
+    {
+        var atributos = _repo.GetAtributos();
+
+        atributos.Insert(0, new Atributo
+        {
+            Id = 0,
+            Nome = "Todos"
+        });
+
+        AtributoComboBox.ItemsSource = atributos;
+        AtributoComboBox.SelectedIndex = 0;
+    }
 
     private void DataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -146,7 +170,7 @@ public partial class MainWindow : Window
             dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
         }
 
-        // 3. Extrai o texto e copia para o Clipboard
+        // 3. Se encontrou a célula, extrai o texto e copia para o Clipboard
         if (dep is DataGridCell cell && cell.Content is TextBlock textBlock)
         {
             string valorCopiado = textBlock.Text;
@@ -580,10 +604,10 @@ public partial class MainWindow : Window
         existing.Manufacturer = scannedDevice.Manufacturer;
         existing.MacAddress = scannedDevice.MacAddress;
         existing.IpAddress = scannedDevice.IpAddress;
-
+        
         existing.Status = "Online";
         existing.LastSeen = DateTime.Now;
-
+        
         existing.Protocol = scannedDevice.Protocol;
         existing.Rssi = scannedDevice.Rssi;
         existing.EstimatedDistanceMeters = scannedDevice.EstimatedDistanceMeters;
@@ -603,7 +627,6 @@ public partial class MainWindow : Window
         existing.OnvifScopes = scannedDevice.OnvifScopes;
         existing.OnvifEndpointAddress = scannedDevice.OnvifEndpointAddress;
     }
-
 
     private void MarkOfflineDevices()
     {
@@ -633,7 +656,6 @@ public partial class MainWindow : Window
         ApplyFilters();
         StatusTextBlock.Text = $"Filtros limpos. {_allDevices.Count} registo(s) disponíveis.";
     }
-
     private void Filter_Changed(object sender, EventArgs e)
     {
         if (!IsLoaded)
@@ -709,7 +731,7 @@ public partial class MainWindow : Window
         {
             var line = raw.Trim();
 
-                if (line.StartsWith("SSID ", StringComparison.OrdinalIgnoreCase))
+            if (line.StartsWith("SSID ", StringComparison.OrdinalIgnoreCase))
             {
                 var idx = line.IndexOf(':');
                 currentSsid = idx >= 0 ? line[(idx + 1)..].Trim() : "";
@@ -2041,11 +2063,26 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
     private void ApplyFilters()
     {
+        /*
+        if (ComboFiltroAtributo.SelectedValue is int id && id > 0)
+            _atributoFiltroId = id;
+        else
+            _atributoFiltroId = null;
+
+        _ativosView.Refresh();
+        */
+        var selectedAtributo = GetSelectedAtributo();
+
+
         var selectedOrigin = GetSelectedOrigin();
         var nameFilter = NameFilterTextBox.Text?.Trim() ?? string.Empty;
         var manufacturerFilter = ManufacturerFilterTextBox.Text?.Trim() ?? string.Empty;
 
         IEnumerable<DeviceInfo> query = _allDevices;
+
+        //if (!string.Equals(selectedAtributo, "Todos", StringComparison.OrdinalIgnoreCase))
+        //    query = query.Where(d => string.Equals(d.Atributos, selectedOrigin, StringComparison.OrdinalIgnoreCase));
+
 
         if (!string.Equals(selectedOrigin, "Todas", StringComparison.OrdinalIgnoreCase))
             query = query.Where(d => string.Equals(d.Origin, selectedOrigin, StringComparison.OrdinalIgnoreCase));
@@ -2261,6 +2298,13 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
             return value;
 
         return "Todas";
+    }
+    private string GetSelectedAtributo()
+    {
+        if (AtributoComboBox.SelectedItem is ComboBoxItem item && item.Content is string value)
+            return value;
+
+        return "Todos";
     }
 
     private static async Task<string> ExecuteCommandAsync(string fileName, string arguments)
@@ -2502,4 +2546,5 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
         MessageBox.Show(sb.ToString(), "Detalhes do Dispositivo", MessageBoxButton.OK, MessageBoxImage.Information);
     }
+
 }
