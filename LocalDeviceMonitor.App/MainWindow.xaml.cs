@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private bool _baselineEstablished = false;
     private int _newDevicesThisScan = 0;
 
+
     private bool _isDarkMode = false;
     private readonly DispatcherTimer _scanTimer = new();
     private bool _isContinuousScanEnabled = false;
@@ -138,7 +139,7 @@ public partial class MainWindow : Window
 
         var db = new AssetDatabase();
         db.EnsureDatabaseCreated();
-        
+
         LoadFiltroAtributos();
 
         _scanTimer.Interval = TimeSpan.FromSeconds(12);
@@ -433,7 +434,7 @@ public partial class MainWindow : Window
 
         toastWindow.Close();
     }
-    
+
 
     private async Task<List<DeviceInfo>> DiscoverDevicesAsync()
     {
@@ -604,10 +605,10 @@ public partial class MainWindow : Window
         existing.Manufacturer = scannedDevice.Manufacturer;
         existing.MacAddress = scannedDevice.MacAddress;
         existing.IpAddress = scannedDevice.IpAddress;
-        
+
         existing.Status = "Online";
         existing.LastSeen = DateTime.Now;
-        
+
         existing.Protocol = scannedDevice.Protocol;
         existing.Rssi = scannedDevice.Rssi;
         existing.EstimatedDistanceMeters = scannedDevice.EstimatedDistanceMeters;
@@ -2547,4 +2548,40 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
         MessageBox.Show(sb.ToString(), "Detalhes do Dispositivo", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void EditDevice_Click(object sender, RoutedEventArgs e)
+    {
+        DeviceInfo? device = (sender as Button)?.DataContext as DeviceInfo
+            ?? DevicesGrid.SelectedItem as DeviceInfo
+            ?? ShadowGrid.SelectedItem as DeviceInfo;
+
+        if (device == null)
+        {
+            MessageBox.Show("Selecione um dispositivo para editar a sua informação.", "Editar", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var editWindow = new EditDeviceWindow(device, _repo) { Owner = this };
+
+        if (editWindow.ShowDialog() == true)
+        {
+            ShowToast("Sucesso", "Detalhes gravados com sucesso!", 3);
+            ApplyFilters();
+
+     
+            DevicesGrid.Items.Refresh();
+            ShadowGrid.Items.Refresh();
+        }
+    }
+    private void BtnDetalhes_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is DeviceInfo device)
+        {
+            var db = new AssetDatabase();
+            db.EnsureDatabaseCreated();
+
+            var window = new DeviceDetailsWindow(device);
+            window.Owner = this;
+            window.ShowDialog();
+        }
+    }
 }
