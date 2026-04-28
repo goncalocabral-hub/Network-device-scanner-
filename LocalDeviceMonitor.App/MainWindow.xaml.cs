@@ -2072,6 +2072,7 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
         _ativosView.Refresh();
         */
+
         var selectedAtributo = GetSelectedAtributo();
 
 
@@ -2081,8 +2082,8 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
         IEnumerable<DeviceInfo> query = _allDevices;
 
-        //if (!string.Equals(selectedAtributo, "Todos", StringComparison.OrdinalIgnoreCase))
-        //    query = query.Where(d => string.Equals(d.Atributos, selectedOrigin, StringComparison.OrdinalIgnoreCase));
+        // if (!string.Equals(selectedAtributo, "Todos", StringComparison.OrdinalIgnoreCase))
+            //query = query.Where(d => string.Equals(d.Atributos, selectedOrigin, StringComparison.OrdinalIgnoreCase));
 
 
         if (!string.Equals(selectedOrigin, "Todas", StringComparison.OrdinalIgnoreCase))
@@ -2093,6 +2094,11 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
         if (!string.IsNullOrWhiteSpace(manufacturerFilter))
             query = query.Where(d => (d.Manufacturer ?? "").Contains(manufacturerFilter, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.Equals(selectedAtributo, "Todos", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(d => string.Equals(d.AtributoAtual?.Trim(), selectedAtributo.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
 
         var filteredList = query
             .OrderByDescending(d => d.Status.Equals("Online", StringComparison.OrdinalIgnoreCase))
@@ -2302,8 +2308,11 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
     }
     private string GetSelectedAtributo()
     {
-        if (AtributoComboBox.SelectedItem is ComboBoxItem item && item.Content is string value)
-            return value;
+  
+        if (AtributoComboBox.SelectedItem is LocalDeviceMonitor.App.Modelos.Atributo attr)
+        {
+            return attr.Nome;
+        }
 
         return "Todos";
     }
