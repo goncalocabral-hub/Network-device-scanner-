@@ -63,6 +63,7 @@ The application is structured in multiple layers:
 - Modbus TCP
 
 🚀 Features
+
 🔍 Device Discovery
 Multi-protocol scanning:
   - BLE
@@ -70,6 +71,7 @@ Multi-protocol scanning:
   - LAN
   - BACnet/IP
   - Modbus TCP
+  - ONVIF
 
 🔄 Continuous Monitoring
   - Automatic scanning loop
