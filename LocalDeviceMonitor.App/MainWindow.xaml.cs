@@ -2088,9 +2088,15 @@ $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 
         if (!string.Equals(selectedOrigin, "Todas", StringComparison.OrdinalIgnoreCase))
             query = query.Where(d => string.Equals(d.Origin, selectedOrigin, StringComparison.OrdinalIgnoreCase));
-
+        
+        // Filtro do Nome ou IP (Pesquisa nos dois campos ao mesmo tempo)
         if (!string.IsNullOrWhiteSpace(nameFilter))
-            query = query.Where(d => (d.Name ?? "").Contains(nameFilter, StringComparison.OrdinalIgnoreCase));
+        {
+            query = query.Where(d => 
+                (d.Name ?? "").Contains(nameFilter, StringComparison.OrdinalIgnoreCase) ||
+                (d.IpAddress ?? "").Contains(nameFilter, StringComparison.OrdinalIgnoreCase)
+            );
+        }
 
         if (!string.IsNullOrWhiteSpace(manufacturerFilter))
             query = query.Where(d => (d.Manufacturer ?? "").Contains(manufacturerFilter, StringComparison.OrdinalIgnoreCase));
